@@ -319,7 +319,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let r = s.range(of: "https://[a-z0-9-]+\\.trycloudflare\\.com", options: .regularExpression) {
           let url = String(s[r])
           DispatchQueue.main.async {
-            if self?.publicURL != url { self?.publicURL = url; self?.notify("외부 공개 URL: \(url)"); self?.updateUI() }
+            if self?.publicURL != url {
+              self?.publicURL = url
+              self?.notify("외부 공개 URL (브라우저로 엽니다): \(url)")
+              if let u = URL(string: url) { NSWorkspace.shared.open(u) } // auto-open the gallery
+              self?.updateUI()
+            }
           }
         }
       }
