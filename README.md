@@ -91,6 +91,44 @@ import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
+## 🔌 Use it from any AI app (MCP + Skill)
+
+**MCP server** — exposes `generate_image`, `search_images`, `get_image` and
+returns the PNG **inline**. Add to any MCP client (Claude Desktop, Codex, Cursor,
+Antigravity, …):
+
+```json
+{
+  "mcpServers": {
+    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+  }
+}
+```
+
+Then just ask your agent *"generate a watercolor fox"* — it calls the tool and
+gets the image back. (Codex CLI: `codex mcp add omnigen -- node …/bin/omnigen-mcp`.)
+
+**Agent Skill** — for skill-aware agents, copy `skills/omnigen/` into your skills
+dir (`~/.claude/skills/`, `~/.codex/skills/`, or project `.agents/skills/`). It
+drives the CLI and hands back ready-to-use file paths.
+
+## 🪟 Cross-platform & Windows
+
+The **CLI, MCP server, and web server are pure Node** → they run on macOS, Linux,
+and Windows. Instead of the macOS menu-bar app, configure everything from the CLI:
+
+```bash
+omnigen config setup          # guided settings (save folder, size, concurrency, OCR, disk limit)
+omnigen config set size fhd   # or set individual keys
+omnigen config show           # view saved + effective settings
+```
+
+Settings persist to `~/.omnigen-vault.json` (override path with `$OMNIGEN_CONFIG`)
+and apply to every command. On Windows: install Node ≥22; thumbnails (macOS `sips`)
+are skipped gracefully (the gallery falls back to full images); for OCR install
+Tesseract and point `OMNIGEN_TESSERACT` at `tesseract.exe`, or run `--no-ocr`.
+The native menu-bar **app** is macOS-only.
+
 ## 🖥️ Menu-bar app (macOS)
 
 ```bash

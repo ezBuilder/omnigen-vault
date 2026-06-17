@@ -14,6 +14,7 @@ app/Paths.swift
 app/AppIcon.iconset/
 app/AppIcon.icns
 app/icon-1024.png
+app/candidates/
 
 # generated galleries / vault data (live on the external disk, never in git)
 gallery.html

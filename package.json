@@ -9,11 +9,14 @@
     ".": "./src/index.js"
   },
   "bin": {
-    "omnigen": "./bin/omnigen"
+    "omnigen": "./bin/omnigen",
+    "omnigen-mcp": "./bin/omnigen-mcp"
   },
   "scripts": {
     "start": "node bin/omnigen generate",
     "query": "node bin/omnigen query",
+    "serve": "node bin/omnigen serve",
+    "mcp": "node bin/omnigen-mcp",
     "stats": "node bin/omnigen stats",
     "doctor": "node bin/omnigen doctor",
     "test": "node --test"

@@ -3,6 +3,8 @@
 import os from 'node:os';
 import path from 'node:path';
 
+import { loadConfigFile } from './configFile.js';
+
 const DEFAULT_CODEX_HOME = path.join(os.homedir(), '.codex');
 
 // Sizes honored by the private Codex image_generation tool.
@@ -25,6 +27,9 @@ export const UNSUPPORTED_WARNING =
  * @param {Record<string, unknown>} [overrides]
  */
 export function resolveConfig(overrides = {}) {
+  // Precedence: explicit overrides (CLI flags) > saved config file > env > defaults.
+  // Folding the file under overrides keeps the per-field `?? env ?? default` chain.
+  overrides = { ...loadConfigFile(), ...overrides };
   const env = process.env;
   const codexHome = overrides.codexHome || env.CODEX_HOME || DEFAULT_CODEX_HOME;
 

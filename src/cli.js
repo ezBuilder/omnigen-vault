@@ -20,6 +20,7 @@ import { retagVault } from './retag.js';
 import { exportSet } from './export.js';
 import { dedupeVault } from './media/phash.js';
 import { serveVault } from './server/serve.js';
+import { configFilePath, loadConfigFile, setConfigKey, SETTINGS } from './configFile.js';
 
 /** Expand a leading ~ to the user's home dir (path.resolve does not). */
 function expandTilde(p) {
@@ -86,6 +87,8 @@ Usage:
   omnigen categories              List prompt categories
   omnigen doctor                  Check auth, disk, OCR, sqlite, dry-run a request
   omnigen init                    Create vault folders + database
+  omnigen config [setup|show|set <k> <v>|path]   Persistent settings (cross-platform)
+  omnigen serve [--public]        Live multilingual gallery + JSON API (see serve options)
 
 generate options:
   --limit N            Stop after N images (0/omit = infinite)
@@ -317,6 +320,42 @@ async function cmdDryRun(config) {
   }, null, 2));
 }
 
+async function cmdConfig(positional, flags) {
+  const [sub, key, ...rest] = positional;
+  if (sub === 'set') {
+    if (!key || rest.length === 0) { console.log('usage: omnigen config set <key> <value>'); return; }
+    const p = setConfigKey(key, rest.join(' '));
+    console.log(`set ${key} = ${rest.join(' ')}  →  ${p}`);
+    return;
+  }
+  if (sub === 'path') { console.log(configFilePath()); return; }
+  if (sub === 'setup') {
+    const rl = (await import('node:readline/promises')).createInterface({ input: process.stdin, output: process.stdout });
+    const cur = loadConfigFile();
+    console.log(`Editing ${configFilePath()} — press Enter to keep each value.\n`);
+    for (const fk of ['vault', 'size', 'concurrency', 'ocr', 'thumbnails', 'max-disk', 'min-free', 'model']) {
+      const def = SETTINGS[fk];
+      const hint = def.hint ? ` [${def.hint}]` : '';
+      const ans = (await rl.question(`${def.label}${hint} (current: ${cur[def.cfg] ?? 'default'}; blank=keep): `)).trim();
+      if (ans) setConfigKey(fk, ans);
+    }
+    rl.close();
+    console.log('');
+  }
+  // default / show
+  const f = loadConfigFile();
+  console.log(`config file: ${configFilePath()}`);
+  const keys = Object.keys(f);
+  console.log(keys.length ? '\nsaved:' : '\n(no saved settings — run "omnigen config setup")');
+  for (const k of keys) console.log(`  ${k} = ${JSON.stringify(f[k])}`);
+  const c = configFromFlags(flags);
+  console.log('\neffective:');
+  for (const k of ['vaultRoot', 'size', 'concurrency', 'ocrEnabled', 'thumbnails', 'maxDiskPercent', 'minFreeGb', 'model']) {
+    console.log(`  ${k} = ${JSON.stringify(c[k])}`);
+  }
+  if (!sub) console.log('\ntip: "config setup" (guided) · "config set <key> <value>" · keys: ' + Object.keys(SETTINGS).join(', '));
+}
+
 export async function main(argv) {
   const [command, ...rest] = argv;
   const { flags, positional } = parseFlags(rest);
@@ -407,6 +446,9 @@ export async function main(argv) {
       await new Promise(() => {});
       return;
     }
+    case 'config':
+      await cmdConfig(positional, flags);
+      return;
     case 'categories':
       console.log(CATEGORY_NAMES.join('\n'));
       return;
