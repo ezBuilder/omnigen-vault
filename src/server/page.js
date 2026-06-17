@@ -71,9 +71,9 @@ export function renderServerGallery({ isPublic = true, allowRating = false, allo
   #more:hover{border-color:var(--accent)} #sentinel{height:1px}
   #empty{display:none;text-align:center;color:var(--muted);padding:60px}
   /* lightbox */
-  #lb{position:fixed;inset:0;z-index:50;background:rgba(4,6,10,.94);display:none;opacity:0;transition:opacity .25s;
-      padding:22px;grid-template-rows:1fr auto;justify-items:center;gap:14px;overflow:auto}
-  #lb.open{display:grid;opacity:1}
+  #lb{position:fixed;inset:0;z-index:50;background:rgba(4,6,10,.96);display:none;opacity:0;transition:opacity .2s;
+      padding:24px;flex-direction:column;align-items:center;justify-content:center;gap:16px;overflow:auto}
+  #lb.open{display:flex;opacity:1}
   #lb img{max-width:min(94vw,1300px);max-height:74vh;border-radius:12px;transform:scale(.97);transition:transform .25s;box-shadow:0 24px 80px rgba(0,0,0,.6)}
   #lb.open img{transform:scale(1)}
   .info{max-width:min(94vw,1300px);width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
@@ -141,6 +141,9 @@ function applyLang(){
   document.getElementById('lbdl').textContent=t('dl');
   // selects keep their option values; refresh labels
   buildRate(); buildSort(); document.getElementById('lang').value=lang;
+  // category dropdown: refresh the "all categories" label (category names stay as-is)
+  var catSel=document.getElementById('cat');
+  if(catSel && catSel.options.length){ catSel.options[0].textContent=t('all'); }
   updateCount();
 }
 function buildRate(){var r=document.getElementById('rate');var v=r.value||'0';r.innerHTML='';
