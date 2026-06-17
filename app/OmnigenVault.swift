@@ -35,10 +35,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     ("QHD 16:9", "qhd"), ("UHD 4K", "uhd"), ("세로 4K", "uhd-portrait")
   ]
 
+  // web server / public tunnel
+  private var serverProc: Process?
+  private var tunnelProc: Process?
+  private var publicURL: String?
+  private let servePort = 8787
+
   // menu item refs
   private var statusRow: NSMenuItem!
   private var toggleItem: NSMenuItem!
   private var themeItem: NSMenuItem!
+  private var serverItem: NSMenuItem!
+  private var urlItem: NSMenuItem!
 
   // settings window + controls
   private var settingsWC: NSWindowController?
@@ -148,6 +156,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     openItem.target = self
     openItem.image = sym("folder", "저장 폴더 열기")
     menu.addItem(openItem)
+
+    menu.addItem(.separator())
+
+    serverItem = NSMenuItem(title: "외부 웹 공개 시작", action: #selector(toggleServer), keyEquivalent: "")
+    serverItem.target = self
+    serverItem.image = sym("globe", "외부 웹 공개")
+    menu.addItem(serverItem)
+
+    urlItem = NSMenuItem(title: "공개 URL 복사", action: #selector(copyPublicURL), keyEquivalent: "")
+    urlItem.target = self
+    urlItem.image = sym("link", "URL 복사")
+    urlItem.isHidden = true
+    menu.addItem(urlItem)
 
     menu.addItem(.separator())
 
@@ -265,6 +286,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
   @objc private func openVaultFolder() {
     NSWorkspace.shared.open(URL(fileURLWithPath: vaultRoot, isDirectory: true))
+  }
+
+  // MARK: web server + public Cloudflare tunnel
+  private func findExecutable(_ name: String) -> String? {
+    let candidates = ["\(NSHomeDirectory())/.local/bin/\(name)", "/opt/homebrew/bin/\(name)", "/usr/local/bin/\(name)", "/usr/bin/\(name)"]
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+  }
+
+  @objc private func toggleServer() {
+    if serverProc?.isRunning ?? false { stopServer() } else { startServer() }
+  }
+
+  private func startServer() {
+    guard serverProc == nil else { return }
+    guard vaultReachable() else { notify("저장 디스크를 찾을 수 없습니다."); return }
+    // 1) hardened read-only public server
+    let s = nodeProcess(["serve", "--public", "--port", String(servePort), "--vault", vaultRoot])
+    s.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.serverProc = nil; self?.stopServer(); self?.updateUI() } }
+    do { try s.run(); serverProc = s } catch { notify("웹 서버 시작 실패: \(error.localizedDescription)"); return }
+
+    // 2) Cloudflare quick tunnel for external access (parse the public URL)
+    if let cf = findExecutable("cloudflared") {
+      let t = Process()
+      t.executableURL = URL(fileURLWithPath: cf)
+      t.arguments = ["tunnel", "--url", "http://localhost:\(servePort)"]
+      let pipe = Pipe()
+      t.standardOutput = pipe
+      t.standardError = pipe
+      pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+        let s = String(data: h.availableData, encoding: .utf8) ?? ""
+        if let r = s.range(of: "https://[a-z0-9-]+\\.trycloudflare\\.com", options: .regularExpression) {
+          let url = String(s[r])
+          DispatchQueue.main.async {
+            if self?.publicURL != url { self?.publicURL = url; self?.notify("외부 공개 URL: \(url)"); self?.updateUI() }
+          }
+        }
+      }
+      t.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.tunnelProc = nil; self?.publicURL = nil; self?.updateUI() } }
+      do { try t.run(); tunnelProc = t } catch { notify("cloudflared 실행 실패") }
+    } else {
+      notify("cloudflared가 없어 로컬만 공개됩니다. 'brew install cloudflared' 후 다시 시작하세요. (http://localhost:\(servePort))")
+    }
+    updateUI()
+  }
+
+  private func stopServer() {
+    tunnelProc?.terminate(); tunnelProc = nil
+    serverProc?.interrupt(); serverProc?.terminate(); serverProc = nil
+    publicURL = nil
+    updateUI()
+  }
+
+  private func stopServerSync() {
+    tunnelProc?.terminate(); serverProc?.terminate()
+    tunnelProc = nil; serverProc = nil; publicURL = nil
+  }
+
+  @objc private func copyPublicURL() {
+    let url = publicURL ?? "http://localhost:\(servePort)"
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(url, forType: .string)
+    notify("URL 복사됨: \(url)")
   }
 
   // MARK: settings window
@@ -514,15 +597,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     toggleItem?.title = running ? "중지" : "시작 (전체 종류)"
     toggleItem?.image = sym(running ? "stop.fill" : "play.fill", running ? "중지" : "시작")
     themeItem?.isEnabled = !running
+
+    let serving = serverProc?.isRunning ?? false
+    serverItem?.title = serving ? (publicURL != nil ? "외부 웹 공개 중지 (공개됨)" : "외부 웹 공개 중지") : "외부 웹 공개 시작"
+    serverItem?.image = sym(serving ? "globe.badge.chevron.backward" : "globe", "외부 웹")
+    if let u = publicURL, serving {
+      urlItem?.isHidden = false
+      urlItem?.title = "공개 URL 복사 — \(u.replacingOccurrences(of: "https://", with: ""))"
+    } else if serving {
+      urlItem?.isHidden = false
+      urlItem?.title = "로컬 URL 복사 — localhost:\(servePort)"
+    } else {
+      urlItem?.isHidden = true
+    }
   }
 
   // MARK: quit / window
   @objc private func quitApp() {
+    stopServerSync()
     stopGenerationSync()
     NSApp.terminate(nil)
   }
 
-  func applicationWillTerminate(_ notification: Notification) { stopGenerationSync() }
+  func applicationWillTerminate(_ notification: Notification) { stopServerSync(); stopGenerationSync() }
 
   func windowWillClose(_ notification: Notification) {
     // back to menu-bar-only once Settings closes
