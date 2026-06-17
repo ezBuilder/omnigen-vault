@@ -90,6 +90,44 @@ import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
+## 🔌 在任意 AI 应用中使用（MCP + Skill）
+
+**MCP 服务器** —— 暴露 `generate_image`、`search_images`、`get_image`，并
+将 PNG **内联** 返回。可添加到任意 MCP 客户端（Claude Desktop、Codex、Cursor、
+Antigravity……）：
+
+```json
+{
+  "mcpServers": {
+    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+  }
+}
+```
+
+随后只需告诉你的智能体 *“生成一只水彩狐狸”* —— 它便会调用该工具并
+拿回图像。（Codex CLI：`codex mcp add omnigen -- node …/bin/omnigen-mcp`。）
+
+**Agent Skill** —— 对于支持 skill 的智能体，将 `skills/omnigen/` 复制到你的 skills
+目录（`~/.claude/skills/`、`~/.codex/skills/` 或项目内的 `.agents/skills/`）。它
+会驱动 CLI 并交回可直接使用的文件路径。
+
+## 🪟 跨平台与 Windows
+
+**CLI、MCP 服务器和 Web 服务器均为纯 Node** → 它们可在 macOS、Linux
+和 Windows 上运行。除了 macOS 菜单栏应用之外，你也可以完全通过 CLI 进行配置：
+
+```bash
+omnigen config setup          # guided settings (save folder, size, concurrency, OCR, disk limit)
+omnigen config set size fhd   # or set individual keys
+omnigen config show           # view saved + effective settings
+```
+
+设置会持久化到 `~/.omnigen-vault.json`（可用 `$OMNIGEN_CONFIG` 覆盖路径）
+并应用于每一条命令。在 Windows 上：安装 Node ≥22；缩略图（macOS `sips`）
+会被优雅地跳过（画廊回退到使用完整图像）；若需 OCR，请安装
+Tesseract 并将 `OMNIGEN_TESSERACT` 指向 `tesseract.exe`，或运行 `--no-ocr`。
+原生菜单栏 **应用** 仅限 macOS。
+
 ## 🖥️ 菜单栏应用（macOS）
 
 ```bash
@@ -118,7 +156,7 @@ cloudflared tunnel --url http://localhost:8787  # public HTTPS, no open port
 
 ## 🧭 命令
 
-| command | what it does |
+| 命令 | 作用 |
 |---|---|
 | `generate` | 无限、可续跑、无文字的生成（按类别或 `--theme "word"`） |
 | `query "…" --json` | 全文搜索 → 供 AI 使用的路径 + 元数据 |

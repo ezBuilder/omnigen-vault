@@ -4,9 +4,10 @@
 
 **무한하고 텍스트 없는 이미지 엔진 + 스스로 큐레이팅하는 갤러리 — 영원히 돌아가도록 설계되었습니다.**
 
-세상의 모든 종류의 이미지를, 지금껏 만들어진 모든 예술 양식으로, 프레임 안에
-**텍스트 없이** 생성합니다 — 카테고리와 해상도별로 정리되고, 썸네일이 만들어지며,
-전문 색인이 구축되고, 세상과 공유할 수 있는 세련된 다국어 갤러리에서 둘러볼 수 있습니다.
+세상의 모든 종류의 이미지를, 지금까지 만들어진 모든 예술 양식으로,
+프레임 안에 **텍스트 없이** 생성합니다 — 카테고리와 해상도별로 정리되고,
+썸네일이 생성되며, 전문(full-text) 색인이 만들어지고, 세상과 공유할 수 있는
+세련된 다국어 갤러리에서 둘러볼 수 있습니다.
 
 [English](../README.md) · **한국어** · [日本語](README.ja.md) · [中文](README.zh.md) · [Español](README.es.md)
 
@@ -19,9 +20,9 @@
 ## ✨ 무엇이 특별한가
 
 - **설계부터 무한합니다.** 결정론적이고 재개 가능한 프롬프트 엔진이 **실세계 60개
-  카테고리** × **연구된 270여 개 예술 양식** × 조명 × 팔레트 × 구도 × 분위기를
-  교차합니다 — 재활용을 시작하기도 전에 **16억 개가 넘는** 기본 조합을 만들어냅니다.
-  언제든 멈췄다가 다시 시작할 수 있으며, 절대 반복하지 않습니다.
+  카테고리** × **연구로 정리된 270여 개 예술 양식** × 조명 × 팔레트 × 구도 ×
+  분위기를 교차합니다 — 재활용을 시작하기도 전에 **16억 개가 넘는** 기본 조합을
+  만들어냅니다. 언제든 멈췄다가 다시 시작할 수 있으며, 절대 반복하지 않습니다.
 - **지구상의 모든 양식.** 사진(아날로그 & 디지털), 고전 → 현대 회화,
   세계/민속/토착 전통, 일러스트레이션/3D/CGI, 판화 & 공예, 그리고 현대적 미감을
   아우르는 텍스트 없는 270여 개의 시각 양식 — *모든* 배치가 단조로운 연속이 아니라
@@ -90,6 +91,44 @@ import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
+## 🔌 어떤 AI 앱에서든 사용하기 (MCP + Skill)
+
+**MCP 서버** — `generate_image`, `search_images`, `get_image`를 노출하고 PNG를
+**인라인으로** 반환합니다. 어떤 MCP 클라이언트(Claude Desktop, Codex, Cursor,
+Antigravity, …)에든 추가하세요:
+
+```json
+{
+  "mcpServers": {
+    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+  }
+}
+```
+
+그런 다음 에이전트에게 *"watercolor fox 하나 생성해줘"*라고 요청하기만 하면 —
+도구를 호출해 이미지를 받아옵니다. (Codex CLI: `codex mcp add omnigen -- node …/bin/omnigen-mcp`.)
+
+**Agent Skill** — 스킬을 인식하는 에이전트라면 `skills/omnigen/`을 스킬 디렉터리
+(`~/.claude/skills/`, `~/.codex/skills/`, 또는 프로젝트의 `.agents/skills/`)에
+복사하세요. CLI를 구동하고 바로 사용할 수 있는 파일 경로를 돌려줍니다.
+
+## 🪟 크로스 플랫폼 & Windows
+
+**CLI, MCP 서버, 웹 서버는 순수 Node**입니다 → macOS, Linux, Windows에서 모두
+실행됩니다. macOS 메뉴 막대 앱 대신, CLI에서 모든 것을 설정하세요:
+
+```bash
+omnigen config setup          # guided settings (save folder, size, concurrency, OCR, disk limit)
+omnigen config set size fhd   # or set individual keys
+omnigen config show           # view saved + effective settings
+```
+
+설정은 `~/.omnigen-vault.json`에 저장되며(`$OMNIGEN_CONFIG`로 경로 재정의 가능)
+모든 명령에 적용됩니다. Windows에서는: Node ≥22를 설치하세요. 썸네일(macOS `sips`)은
+자연스럽게 건너뛰어집니다(갤러리는 전체 이미지로 대체됩니다). OCR을 쓰려면
+Tesseract를 설치하고 `OMNIGEN_TESSERACT`를 `tesseract.exe`로 지정하거나
+`--no-ocr`로 실행하세요. 네이티브 메뉴 막대 **앱**은 macOS 전용입니다.
+
 ## 🖥️ 메뉴 막대 앱 (macOS)
 
 ```bash
@@ -110,7 +149,7 @@ node bin/omnigen serve --public --port 8787     # read-only, hardened
 cloudflared tunnel --url http://localhost:8787  # public HTTPS, no open port
 ```
 
-공개 모드는 **읽기 전용**이며(평점 기록은 옵트인), id로만 이미지를 제공하고
+공개 모드는 **읽기 전용**이며(평점 기록 반영은 옵트인), id로만 이미지를 제공하고
 realpath로 제한된 경로 검증을 거치며, 요청 속도를 제한하고, 요청 크기에 상한을 두고,
 엄격한 보안 헤더를 설정하며, 선택적 `--token`을 지원합니다.
 [SECURITY.md](SECURITY.md)를 참조하세요. 갤러리 UI는 다국어(EN/KO/JA/ZH/ES)이며
@@ -118,7 +157,7 @@ realpath로 제한된 경로 검증을 거치며, 요청 속도를 제한하고,
 
 ## 🧭 명령어
 
-| command | what it does |
+| command | 하는 일 |
 |---|---|
 | `generate` | 무한하고 재개 가능한 텍스트 없는 생성(카테고리별 또는 `--theme "word"`) |
 | `query "…" --json` | 전문 검색 → AI 활용을 위한 경로 + 메타데이터 |

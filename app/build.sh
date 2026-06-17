@@ -14,9 +14,21 @@ MACOS="$BUNDLE/Contents/MacOS"
 RES="$BUNDLE/Contents/Resources"
 mkdir -p "$MACOS" "$RES"
 
-# Embed the app icon (generate it if missing).
-if [ ! -f "$APP_DIR/AppIcon.icns" ] && [ -f "$APP_DIR/make-icon.mjs" ]; then
-  "$NODE_BIN" "$APP_DIR/make-icon.mjs" "$APP_DIR/icon-1024.png" >/dev/null 2>&1 || true
+# Build the app icon from the 1024 master (regenerate ALL sizes every build so
+# the iconset can never be left half-updated). Falls back to make-icon.mjs.
+ICON_MASTER="$APP_DIR/icon-1024.png"
+if [ ! -f "$ICON_MASTER" ] && [ -f "$APP_DIR/make-icon.mjs" ]; then
+  "$NODE_BIN" "$APP_DIR/make-icon.mjs" "$ICON_MASTER" >/dev/null 2>&1 || true
+fi
+if [ -f "$ICON_MASTER" ]; then
+  ICONSET="$APP_DIR/AppIcon.iconset"; mkdir -p "$ICONSET"
+  for spec in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" \
+              "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" \
+              "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
+    sz="${spec%% *}"; nm="${spec##* }"
+    sips -z "$sz" "$sz" "$ICON_MASTER" --out "$ICONSET/$nm.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET" -o "$APP_DIR/AppIcon.icns"
 fi
 [ -f "$APP_DIR/AppIcon.icns" ] && cp "$APP_DIR/AppIcon.icns" "$RES/AppIcon.icns"
 

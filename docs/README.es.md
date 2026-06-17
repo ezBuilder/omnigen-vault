@@ -2,9 +2,9 @@
 
 # 🖼️ Omnigen Vault
 
-**Un motor de imágenes infinito y sin texto + una galería que se cataloga sola, construido para funcionar para siempre.**
+**Un motor de imágenes infinito y sin texto + una galería que se cura a sí misma, construido para funcionar para siempre.**
 
-Genera todo tipo de imagen del mundo, en cada estilo artístico jamás creado, con
+Genera todo tipo de imagen del mundo, en todos los estilos artísticos jamás creados, con
 **cero texto** en el encuadre — organizadas por categoría y resolución, con miniaturas,
 indexadas por texto completo y explorables en una elegante galería multilingüe que puedes compartir
 con el mundo.
@@ -90,6 +90,44 @@ Programáticamente (Node):
 import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
+
+## 🔌 Úsalo desde cualquier app de IA (MCP + Skill)
+
+**Servidor MCP** — expone `generate_image`, `search_images`, `get_image` y
+devuelve el PNG **en línea**. Añádelo a cualquier cliente MCP (Claude Desktop, Codex, Cursor,
+Antigravity, …):
+
+```json
+{
+  "mcpServers": {
+    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+  }
+}
+```
+
+Luego basta con pedirle a tu agente *"generate a watercolor fox"* — llama a la herramienta y
+recupera la imagen. (Codex CLI: `codex mcp add omnigen -- node …/bin/omnigen-mcp`.)
+
+**Agent Skill** — para agentes compatibles con skills, copia `skills/omnigen/` en tu directorio
+de skills (`~/.claude/skills/`, `~/.codex/skills/`, o el `.agents/skills/` del proyecto). Maneja
+la CLI y te devuelve rutas de archivo listas para usar.
+
+## 🪟 Multiplataforma y Windows
+
+La **CLI, el servidor MCP y el servidor web son Node puro** → se ejecutan en macOS, Linux
+y Windows. En lugar de la app de barra de menús de macOS, configura todo desde la CLI:
+
+```bash
+omnigen config setup          # guided settings (save folder, size, concurrency, OCR, disk limit)
+omnigen config set size fhd   # or set individual keys
+omnigen config show           # view saved + effective settings
+```
+
+Los ajustes persisten en `~/.omnigen-vault.json` (sobrescribe la ruta con `$OMNIGEN_CONFIG`)
+y se aplican a cada comando. En Windows: instala Node ≥22; las miniaturas (`sips` de macOS)
+se omiten de forma elegante (la galería recurre a las imágenes completas); para OCR instala
+Tesseract y apunta `OMNIGEN_TESSERACT` a `tesseract.exe`, o ejecuta `--no-ocr`.
+La **app** nativa de barra de menús es solo para macOS.
 
 ## 🖥️ App de barra de menús (macOS)
 

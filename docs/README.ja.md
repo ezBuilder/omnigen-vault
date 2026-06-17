@@ -91,6 +91,44 @@ import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
+## 🔌 任意の AI アプリから使う（MCP + Skill）
+
+**MCP サーバー** — `generate_image`、`search_images`、`get_image` を公開し、PNG を
+**インラインで**返します。任意の MCP クライアント（Claude Desktop、Codex、Cursor、
+Antigravity、…）に追加できます:
+
+```json
+{
+  "mcpServers": {
+    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+  }
+}
+```
+
+あとはエージェントに *"generate a watercolor fox"* と頼むだけ — ツールを呼び出して
+画像を返してくれます。（Codex CLI: `codex mcp add omnigen -- node …/bin/omnigen-mcp`。）
+
+**Agent Skill** — スキル対応エージェント向けに、`skills/omnigen/` をスキルディレクトリ
+（`~/.claude/skills/`、`~/.codex/skills/`、またはプロジェクトの `.agents/skills/`）に
+コピーします。これが CLI を駆動し、すぐ使えるファイルパスを返してくれます。
+
+## 🪟 クロスプラットフォーム & Windows
+
+**CLI、MCP サーバー、Web サーバーは純粋な Node** → macOS、Linux、Windows で動作します。
+macOS のメニューバーアプリの代わりに、すべてを CLI から設定します:
+
+```bash
+omnigen config setup          # guided settings (save folder, size, concurrency, OCR, disk limit)
+omnigen config set size fhd   # or set individual keys
+omnigen config show           # view saved + effective settings
+```
+
+設定は `~/.omnigen-vault.json` に永続化され（パスは `$OMNIGEN_CONFIG` で上書き可能）、
+すべてのコマンドに適用されます。Windows では: Node ≥22 をインストール。サムネイル
+（macOS の `sips`）は適切にスキップされます（ギャラリーはフル画像にフォールバック）。
+OCR には Tesseract をインストールし、`OMNIGEN_TESSERACT` を `tesseract.exe` に向けるか、
+`--no-ocr` で実行します。ネイティブのメニューバー **アプリ** は macOS 専用です。
+
 ## 🖥️ メニューバーアプリ（macOS）
 
 ```bash
