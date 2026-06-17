@@ -61,7 +61,6 @@ export function resolveConfig(overrides = {}) {
     dbPath: overrides.dbPath || path.join(vaultRoot, 'index.sqlite'),
     quarantineDir: overrides.quarantineDir || path.join(vaultRoot, 'quarantine'),
     galleryPath: overrides.galleryPath || path.join(vaultRoot, 'gallery.html'),
-    previewPath: overrides.previewPath || path.join(vaultRoot, 'preview.html'),
 
     // --- live local gallery server (omnigen serve) ---
     servePort: numeric(overrides.servePort ?? env.OMNIGEN_SERVE_PORT, 8787),

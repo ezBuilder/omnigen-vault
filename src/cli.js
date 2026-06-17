@@ -78,7 +78,6 @@ Usage:
   omnigen query "<text>" [opts]   Find images for an AI to use
   omnigen stats                   Show vault statistics (incl. disk usage)
   omnigen gallery [--all]         Build a static HTML gallery (thumbnails + prompts)
-  omnigen preview [N]             Build a recent-N preview page (default 50; --refresh S to auto-reload)
   omnigen recheck                 Re-OCR quarantined images, promote text-free ones
   omnigen retag                   Backfill tags from taxonomy fields to enrich full-text search
   omnigen dedupe [--threshold 5]  Hash images (perceptual) + mark near-duplicates (status='duplicate')
@@ -261,21 +260,6 @@ function cmdGallery(config, flags) {
   console.log(`  open it directly, or host the vault folder to publish.`);
 }
 
-function cmdPreview(config, positional, flags) {
-  if (!fs.existsSync(config.dbPath)) {
-    console.log(`No vault yet at ${config.dbPath}.`);
-    return;
-  }
-  const count = Number(positional[0]) || (flags.count ? Number(flags.count) : 50);
-  const refreshSec = flags.refresh ? Number(flags.refresh) : 0;
-  const res = buildGallery(config, {
-    limit: count,
-    out: config.previewPath,
-    title: `최근 ${count}장 미리보기`,
-    refreshSec
-  });
-  console.log(`preview written: ${res.outPath} (${res.count} most-recent of ${res.total})`);
-}
 
 function cmdQuery(config, positional, flags) {
   const query = positional.join(' ');
@@ -380,9 +364,6 @@ export async function main(argv) {
       return;
     case 'gallery':
       cmdGallery(config, flags);
-      return;
-    case 'preview':
-      cmdPreview(config, positional, flags);
       return;
     case 'recheck':
       await recheckQuarantine(config);

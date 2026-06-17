@@ -39,13 +39,15 @@ export const DIMENSIONS = {
     'duotone color scheme'
   ],
   composition: [
+    // NOTE: 'seamless repeating pattern' was removed — applied across all
+    // categories it produced ugly tiled/grid images. Pattern categories still
+    // get patterns via their subjects, not this composition.
     'centered symmetrical composition',
     'rule-of-thirds composition',
     'top-down flat lay',
     'extreme close-up detail',
     'wide establishing shot',
     'dynamic diagonal composition',
-    'seamless repeating pattern',
     'minimal single subject on plain background',
     'layered depth with foreground and background',
     'birds-eye aerial view'

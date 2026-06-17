@@ -138,7 +138,7 @@ open /Applications/OmnigenVault.app
 ```
 
 A clean menu-bar menu (SF Symbol icons, no clutter): start/stop toggle, generate
-by word, recent preview, build gallery, open folder, and a **Settings** window
+by word, build gallery, open folder, and a **Settings** window
 (save location · concurrency · resolution · OCR · disk ceiling · launch-at-login ·
 auto-start). Live count + disk % in the menu. Quitting always stops the worker.
 
@@ -161,7 +161,7 @@ auto-detects the visitor's language.
 |---|---|
 | `generate` | infinite, resumable, text-free generation (by-category or `--theme "word"`) |
 | `query "…" --json` | full-text search → paths + metadata for AI use |
-| `gallery` / `preview [N]` | build a static gallery / recent-N preview page |
+| `gallery` | build a static gallery (newest-first, search + filter + lightbox) |
 | `serve` | live multilingual gallery + JSON API (+ `--public` for the world) |
 | `dedupe` | perceptual-hash near-duplicate detection |
 | `export --rating 4 --out DIR` | copy a curated set + contact sheet |

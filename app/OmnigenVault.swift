@@ -1,6 +1,6 @@
 // OmnigenVault — native macOS menu-bar controller for the omnigen-vault generator.
 //
-// Lean menu for quick actions (start/stop toggle, word generation, preview,
+// Lean menu for quick actions (start/stop toggle, word generation,
 // gallery, open folder) + a Settings window for configuration (save location,
 // concurrency, resolution, OCR, disk ceiling, launch-at-login, auto-start).
 // The generator runs as a child node process and is always stopped when the app
@@ -53,7 +53,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   // derived paths
   private var dbPath: String { vaultRoot + "/index.sqlite" }
   private var galleryPath: String { vaultRoot + "/gallery.html" }
-  private var previewPath: String { vaultRoot + "/preview.html" }
 
   // MARK: lifecycle
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -139,11 +138,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     menu.addItem(themeItem)
 
     menu.addItem(.separator())
-
-    let previewItem = NSMenuItem(title: "최근 생성 미리보기", action: #selector(makePreview), keyEquivalent: "")
-    previewItem.target = self
-    previewItem.image = sym("clock.arrow.circlepath", "미리보기")
-    menu.addItem(previewItem)
 
     let galleryItem = NSMenuItem(title: "갤러리 만들기 / 열기", action: #selector(makeGallery), keyEquivalent: "g")
     galleryItem.target = self
@@ -255,19 +249,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     if proc.isRunning { proc.interrupt(); RunLoop.current.run(until: Date().addingTimeInterval(0.5)) }
   }
 
-  // MARK: gallery / preview / folder
+  // MARK: gallery / folder
   @objc private func makeGallery() {
     let p = nodeProcess(["gallery", "--vault", vaultRoot])
     p.terminationHandler = { [weak self] _ in
       DispatchQueue.main.async { self?.openIfExists(self?.galleryPath) }
-    }
-    try? p.run()
-  }
-
-  @objc private func makePreview() {
-    let p = nodeProcess(["preview", "50", "--vault", vaultRoot])
-    p.terminationHandler = { [weak self] _ in
-      DispatchQueue.main.async { self?.openIfExists(self?.previewPath) }
     }
     try? p.run()
   }
