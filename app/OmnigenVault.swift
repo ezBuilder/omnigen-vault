@@ -329,8 +329,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private func startServer() {
     guard serverProc == nil else { return }
     guard vaultReachable() else { notify("저장 디스크를 찾을 수 없습니다."); return }
-    // 1) hardened public server (read-only except in-browser star rating write-back)
-    let s = nodeProcess(["serve", "--public", "--allow-rating", "--port", String(servePort), "--vault", vaultRoot])
+    // 1) hardened public server — READ-ONLY (no public write-back; ratings are owner-only, set locally)
+    let s = nodeProcess(["serve", "--public", "--port", String(servePort), "--vault", vaultRoot])
     s.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.serverProc = nil; self?.stopServer(); self?.updateUI() } }
     do { try s.run(); serverProc = s } catch { notify("웹 서버 시작 실패: \(error.localizedDescription)"); return }
 
