@@ -59,18 +59,29 @@ node bin/omnigen gallery && open "$(node bin/omnigen stats >/dev/null; echo)"  #
 로그인한 Codex/ChatGPT 세션, OCR용 `tesseract` (`brew install tesseract`),
 그리고 보관소용 탑재된 외부/데이터 디스크.
 
-## 🤖 AI 매우 간단한 설치 및 사용
+## 🤖 AI 에이전트를 위해 — 읽기, 설치, 사용
 
-이 도구는 AI 에이전트에 의해 구동되도록 제작되었습니다. 의존성 없음, 클론 하나:
+영점부터 결과까지, 순서대로 모든 것. **`npm install` 없음** — CLI, MCP 서버, 웹 서버는 순수 Node. 생성은 **로컬 ChatGPT/Codex 인증** (`~/.codex/auth.json`)을 재사용합니다; 한 번 로그인하세요 (Codex CLI / ChatGPT 앱), `doctor`가 이를 검증합니다.
+
+**1. 사전 조건** — 없는 것만 설치하세요:
 
 ```bash
-git clone <your-repo-url> omnigen-vault && cd omnigen-vault   # no npm install needed
+node --version             # need ≥ 22   → else: brew install node   (or https://nodejs.org)
+brew install tesseract     # OCR text-check (optional — or run generate with --no-ocr)
+brew install cloudflared   # only if you'll expose a public URL (optional)
 ```
 
-그러면 에이전트는 **한 가지 기계 읽기 가능 명령**으로 이미지를 찾고 사용합니다:
+**2. 설치 및 생성:**
 
 ```bash
-# returns absolute paths + metadata as JSON — pipe straight into a tool call
+git clone https://github.com/ezBuilder/omnigen-vault.git && cd omnigen-vault
+node bin/omnigen doctor                 # checks auth, disk, OCR, sqlite — fix what it flags
+node bin/omnigen generate               # infinite, resumable, text-free (Ctrl-C to stop)
+```
+
+**3. 이미지 찾기 및 재사용 — 하나의 기계 읽기 가능 명령:**
+
+```bash
 node bin/omnigen query "misty mountain at golden hour" --json --limit 5
 ```
 
@@ -80,36 +91,37 @@ node bin/omnigen query "misty mountain at golden hour" --json --limit 5
    "size": "1536x1024", "prompt": "…", "tags": ["…"] }]
 ```
 
-또는 라이브 서버의 JSON API를 쿼리합니다:
+…또는 라이브 서버의 JSON API를 쿼리합니다:
 
 ```bash
 node bin/omnigen serve --port 8787
 curl 'localhost:8787/api/search?q=neon%20city&minRating=4&limit=10'
 ```
 
-프로그래밍 방식 (Node):
-
 ```js
 import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
+**4. 또는 MCP를 통해 에이전트에 직접 연결** — 한 가지 명령, 에이전트는 보관소를 검색하고 이미지를 인라인으로 받습니다 (아래 참조):
+
+```bash
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+```
+
 ## 🔌 모든 AI 앱에서 사용하기 (MCP)
 
-Omnigen은 **MCP 서버**를 제공하여 AI가 보관소를 검색하고, **이미지를 인라인으로 볼 수 있으며**, 카테고리를 탐색하고, 새 이미지를 생성할 수 있습니다 — 모두 **로컬에서, 자신의 머신과 자신의 할당량에서**. 검색은 **한국어 / 일본어 / 중국어 /
-스페인어**로도 작동하며, 결과는 **현지화된** 주제 + 프롬프트로 반환됩니다.
+Omnigen은 **MCP 서버**를 제공하여 AI가 보관소를 검색하고, **이미지를 인라인으로 볼 수 있으며**, 카테고리를 탐색하고, 새 이미지를 생성할 수 있습니다 — 모두 **로컬에서, 자신의 머신과 자신의 할당량에서**. 검색은 **한국어 / 일본어 / 중국어 / 스페인어**로도 작동하며, 결과는 **현지화된** 주제 + 프롬프트로 반환됩니다.
 
-**도구:** `search_images` (현지화됨; 카테고리 / 방향 / 평점으로 필터링) ·
-`get_image` (id 또는 경로로) · `list_categories` (현지화된 레이블 + 개수) ·
-`generate_image`.
+**도구:** `search_images` (현지화됨; 카테고리 / 방향 / 평점으로 필터링) · `get_image` (id 또는 경로로) · `list_categories` (현지화된 레이블 + 개수) · `generate_image`.
 
 Claude Code / Codex / Cursor / Claude Desktop에 추가하세요:
 
 ```bash
-# zero-clone via npx (works once the repo is public / published):
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y omnigen-vault omnigen-mcp
+# GitHub에서 직접 — npm publish 필요 없음; 레포가 공개되면 바로 작동:
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
 
-# or from a local clone:
+# or from a local clone (most reliable, fully offline):
 claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
 ```
 
@@ -120,14 +132,16 @@ claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLU
   "mcpServers": {
     "omnigen": {
       "command": "npx",
-      "args": ["-y", "omnigen-vault", "omnigen-mcp"],
+      "args": ["-y", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
       "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
     }
   }
 }
 ```
 
-그러면 에이전트에 *"misty mountain at golden hour 찾기"* 또는 *"watercolor fox 생성"*을 요청하면 — 도구를 호출하고 이미지를 **인라인으로** 받습니다.
+npm에 발행되면, 더 짧은 `npx -y omnigen-vault omnigen-mcp`도 작동합니다.
+
+그러면 에이전트에 *"find a misty mountain at golden hour"* 또는 *"generate a watercolor fox"*를 요청하세요 — 도구를 호출하고 이미지를 **인라인으로** 받습니다.
 
 **에이전트 스킬** — 스킬을 인식하는 에이전트의 경우, `skills/omnigen/`을 스킬 디렉터리(`~/.claude/skills/`, `~/.codex/skills/`, 또는 프로젝트 `.agents/skills/`)에 복사합니다.
 
@@ -162,15 +176,42 @@ open /Applications/OmnigenVault.app
 (저장 위치 · 동시성 · 해상도 · OCR · 디스크 상한선 · 로그인 시 시작 ·
 자동 시작). 메뉴의 라이브 개수 + 디스크 %. 종료하면 항상 워커를 중지합니다.
 
-## 🌐 세상과 공유 (안전하게)
+## 🌐 공개해서 사용 — 당신만의 URL (선택사항)
+
+갤러리는 일반적인 로컬 HTTP 서버이므로, **어떤** 터널이든 이를 공개 HTTPS URL로 전환합니다 — **자신의 도메인이나 계정이 필요 없습니다**. 서버를 시작한 다음 한 가지 터널을 선택하세요:
 
 ```bash
-node bin/omnigen serve --public --port 8787     # read-only, hardened
-cloudflared tunnel --url http://localhost:8787  # public HTTPS, no open port
+node bin/omnigen serve --public --port 8787        # read-only, hardened
+
+# expose it with ONE of these (each prints a public URL):
+cloudflared tunnel --url http://localhost:8787     # Cloudflare — free, no account (*.trycloudflare.com)
+npx localtunnel --port 8787                         # localtunnel — free, no account
+ngrok http 8787                                     # ngrok — free tier (sign-up)
+tailscale funnel 8787                               # Tailscale — if you already use it
 ```
 
-공개 모드는 **읽기 전용** (평점 쓰기 백은 선택적), id로만 이미지를 제공하며 realpath로 제한된 경로 검증, 속도 제한, 요청 크기 상한선, 엄격한 보안 헤더를 설정하고, 선택적 `--token`을 지원합니다. [SECURITY.md](../SECURITY.md)를 참조하세요. 갤러리 UI는 다국어 (EN/KO/JA/ZH/ES)이며
-방문자의 언어를 자동 감지합니다.
+공개 URL을 **원하지 않나요**? 터널을 전혀 건너뛰세요 — `http://localhost:8787`에서 제공될 뿐입니다 (더하기 당신의 LAN).
+
+### Cloudflare 터널, 자세히
+
+한 번 설치하세요 — `brew install cloudflared` (macOS) · `winget install Cloudflare.cloudflared` (Windows) · 또는 [Cloudflare 다운로드](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)의 바이너리. 그런 다음 **A** (즉시, 익명) 또는 **B** (당신의 도메인)를 선택하세요:
+
+```bash
+# A) Quick & anonymous — a throwaway public URL, no login, no domain:
+cloudflared tunnel --url http://localhost:8787      # → https://<random>.trycloudflare.com
+
+# B) Your own domain — a stable URL via a NAMED tunnel (one-time interactive login):
+cloudflared tunnel login                            # opens a browser; authorize your domain
+cloudflared tunnel create omnigen                   # creates the tunnel + credentials
+cloudflared tunnel route dns omnigen gallery.example.com
+cloudflared tunnel run --url http://localhost:8787 omnigen
+```
+
+**B**를 사용하면, `https://gallery.example.com`은 IP가 변경되어도 계속 머신을 가리킵니다 — `gallery.ezbuilder.app`의 저자의 라이브 데모가 정확히 이렇게 실행되는 방식입니다. 당신이 당신의 것을 실행합니다; 레포의 아무것도 누구도 저자의 URL로 가리키지 않습니다.
+
+### 안전
+
+공개 모드는 **읽기 전용** (평점 쓰기 백은 선택적), id로만 이미지를 제공하며 realpath 제한 경로 검증, 속도 제한, 요청 크기 상한선, 엄격한 보안 헤더를 설정하고, 선택적 `--token`을 지원합니다. [SECURITY.md](SECURITY.md)를 참조하세요. 갤러리 UI는 다국어 (EN/KO/JA/ZH/ES)이며 방문자의 언어를 자동 감지합니다.
 
 ## 🧭 명령어
 

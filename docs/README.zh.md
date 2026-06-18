@@ -53,18 +53,29 @@ node bin/omnigen gallery && open "$(node bin/omnigen stats >/dev/null; echo)"  #
 已登录的 Codex/ChatGPT 会话、用于 OCR 的 `tesseract`（`brew install tesseract`），
 以及为库装载的外部/数据磁盘。
 
-## 🤖 AI 超级简单安装和使用
+## 🤖 为 AI 智能体 — 读取、安装和使用
 
-此工具旨在由 AI 代理驱动。零依赖，一次克隆：
+从零到成果的所有步骤，按顺序进行。**零 `npm install`** — CLI、MCP 服务器和网络服务器都是纯 Node。生成重用您的**本地 ChatGPT/Codex 身份验证**（`~/.codex/auth.json`）；登录一次（Codex CLI / ChatGPT 应用）然后 `doctor` 验证它。
+
+**1. 前置条件** — 仅安装缺失的部分：
 
 ```bash
-git clone <your-repo-url> omnigen-vault && cd omnigen-vault   # no npm install needed
+node --version             # need ≥ 22   → else: brew install node   (or https://nodejs.org)
+brew install tesseract     # OCR text-check (optional — or run generate with --no-ocr)
+brew install cloudflared   # only if you'll expose a public URL (optional)
 ```
 
-然后代理使用**一个机器可读命令**查找和使用图像：
+**2. 安装和生成：**
 
 ```bash
-# returns absolute paths + metadata as JSON — pipe straight into a tool call
+git clone https://github.com/ezBuilder/omnigen-vault.git && cd omnigen-vault
+node bin/omnigen doctor                 # checks auth, disk, OCR, sqlite — fix what it flags
+node bin/omnigen generate               # infinite, resumable, text-free (Ctrl-C to stop)
+```
+
+**3. 查找和重用图像 — 一个机器可读的命令：**
+
+```bash
 node bin/omnigen query “misty mountain at golden hour” --json --limit 5
 ```
 
@@ -74,35 +85,37 @@ node bin/omnigen query “misty mountain at golden hour” --json --limit 5
    “size”: “1536x1024”, “prompt”: “…”, “tags”: [“…”] }]
 ```
 
-或查询实时服务器的 JSON API：
+…或查询实时服务器的 JSON API，或从 Node 调用：
 
 ```bash
 node bin/omnigen serve --port 8787
 curl 'localhost:8787/api/search?q=neon%20city&minRating=4&limit=10'
 ```
 
-编程方式 (Node)：
-
 ```js
 import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
+```
+
+**4. 或直接通过 MCP 将其接入您的智能体** — 一个命令，您的 AI 搜索库并获取内联图像（详见下方）：
+
+```bash
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
 ```
 
 ## 🔌 从任何 AI 应用使用它 (MCP)
 
 Omnigen 提供一个 **MCP 服务器**，以便您的 AI 可以搜索库、**内联查看图像**、浏览类别和生成新图像 — 全部**在本地、您自己的机器和您自己的配额上**。搜索也适用于**韩语/日语/中文/西班牙语**，结果带有**本地化**主题和提示返回。
 
-**工具：** `search_images`（本地化；按类别/方向/评分过滤）·
-`get_image`（按 ID 或路径）· `list_categories`（本地化标签 + 计数）·
-`generate_image`。
+**工具：** `search_images`（本地化；按类别/方向/评分过滤）· `get_image`（按 ID 或路径）· `list_categories`（本地化标签 + 计数）· `generate_image`。
 
 将其添加到 Claude Code / Codex / Cursor / Claude Desktop：
 
 ```bash
-# zero-clone via npx (works once the repo is public / published):
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y omnigen-vault omnigen-mcp
+# straight from GitHub — no npm publish needed; works as soon as the repo is public:
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
 
-# or from a local clone:
+# or from a local clone (most reliable, fully offline):
 claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
 ```
 
@@ -113,16 +126,18 @@ claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLU
   “mcpServers”: {
     “omnigen”: {
       “command”: “npx”,
-      “args”: [“-y”, “omnigen-vault”, “omnigen-mcp”],
+      “args”: [“-y”, “github:ezBuilder/omnigen-vault”, “omnigen-mcp”],
       “env”: { “OMNIGEN_VAULT_ROOT”: “~/.omnigen-vault” }
     }
   }
 }
 ```
 
-然后问您的代理*”查找金色时刻的雾蒙蒙的山”*或*”生成水彩狐狸”* — 它调用工具并**内联**获取图像。
+发布到 npm 后，较短的 `npx -y omnigen-vault omnigen-mcp` 也可以使用。
 
-**代理技能** — 对于支持技能的代理，将 `skills/omnigen/` 复制到您的技能目录（`~/.claude/skills/`、`~/.codex/skills/` 或项目 `.agents/skills/`）。
+然后问您的智能体 *”找一个雾蒙蒙的山在金色时刻”* 或 *”生成一个水彩狐狸”* — 它调用工具并**内联**获取图像。
+
+**智能体技能** — 对于支持技能的智能体，将 `skills/omnigen/` 复制到您的技能目录（`~/.claude/skills/`、`~/.codex/skills/` 或项目 `.agents/skills/`）。
 
 **保持最新：** `omnigen upgrade`（git pull / npx）更新到最新版本。
 
@@ -148,14 +163,42 @@ open /Applications/OmnigenVault.app
 
 一个干净的菜单栏菜单（SF Symbol 图标，没有混乱）：启动/停止切换、按字生成、构建库、打开文件夹和一个**设置**窗口（保存位置 · 并发 · 分辨率 · OCR · 磁盘上限 · 启动时启动 · 自动启动）。菜单中的实时计数和磁盘百分比。退出始终停止工作者。
 
-## 🌐 与世界分享它（安全地）
+## 🌐 将其公开 — 您自己的 URL（可选）
+
+库是一个常规的本地 HTTP 服务器，所以**任何**隧道都能将其变成一个公开的 HTTPS URL — **不需要您自己的域名或账户**。启动服务器，然后选择一个隧道：
 
 ```bash
-node bin/omnigen serve --public --port 8787     # read-only, hardened
-cloudflared tunnel --url http://localhost:8787  # public HTTPS, no open port
+node bin/omnigen serve --public --port 8787        # read-only, hardened
+
+# expose it with ONE of these (each prints a public URL):
+cloudflared tunnel --url http://localhost:8787     # Cloudflare — free, no account (*.trycloudflare.com)
+npx localtunnel --port 8787                         # localtunnel — free, no account
+ngrok http 8787                                     # ngrok — free tier (sign-up)
+tailscale funnel 8787                               # Tailscale — if you already use it
 ```
 
-公开模式是**只读的**（评分回写是可选的），仅按 ID 提供图像，具有 realpath 限制的路径验证、速率限制、请求大小上限、严格的安全标头，并支持可选的 `--token`。见 [SECURITY.md](../SECURITY.md)。库 UI 是多语言的（EN/KO/JA/ZH/ES），并自动检测访问者的语言。
+不想要**任何**公开 URL？完全跳过隧道 — 它只在 `http://localhost:8787` 上服务（加上您的局域网）。
+
+### Cloudflare 隧道，详细信息
+
+安装一次 — `brew install cloudflared`（macOS）· `winget install Cloudflare.cloudflared`（Windows）· 或来自 [Cloudflare 的下载](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) 的二进制文件。然后选择 **A**（即时、匿名）或 **B**（您自己的域名）：
+
+```bash
+# A) Quick & anonymous — a throwaway public URL, no login, no domain:
+cloudflared tunnel --url http://localhost:8787      # → https://<random>.trycloudflare.com
+
+# B) Your own domain — a stable URL via a NAMED tunnel (one-time interactive login):
+cloudflared tunnel login                            # opens a browser; authorize your domain
+cloudflared tunnel create omnigen                   # creates the tunnel + credentials
+cloudflared tunnel route dns omnigen gallery.example.com
+cloudflared tunnel run --url http://localhost:8787 omnigen
+```
+
+使用 **B**，`https://gallery.example.com` 会一直指向您的机器，即使其 IP 改变 — 这正是作者的实时演示 `gallery.ezbuilder.app` 运行方式。您运行您自己的；仓库中的任何内容都不会将任何人指向作者的 URL。
+
+### 安全性
+
+公开模式是**只读的**（评分回写是可选的），仅按 id 提供图像，具有 realpath 限制的路径验证、速率限制、请求大小上限、严格的安全标头，并支持可选的 `--token`。见 [SECURITY.md](SECURITY.md)。库 UI 是多语言的（EN/KO/JA/ZH/ES），并自动检测访问者的语言。
 
 ## 🧭 命令
 
