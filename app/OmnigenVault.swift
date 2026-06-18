@@ -83,6 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     pollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in self?.refreshCount() }
     updateUI()
 
+    // Surface an empty/wrong vault immediately — otherwise the tray count just shows 0 with no hint
+    // (e.g. when the app points at the default folder but the real vault lives on another disk).
+    if !FileManager.default.fileExists(atPath: dbPath) {
+      notify("이 저장 폴더에 이미지 DB가 없습니다: \(vaultRoot)\n다른 디스크에 보관 중이면 메뉴 ▸ 설정에서 저장 폴더를 선택하세요.")
+    }
+
     if autoStartGeneration && vaultReachable() {
       startAll()
     }
