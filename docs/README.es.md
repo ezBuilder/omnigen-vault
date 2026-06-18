@@ -112,7 +112,7 @@ const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 
 **4. O conéctalo directamente a tu agente sobre MCP** — un comando, y tu IA busca en la bóveda y obtiene imágenes de vuelta en línea (detalles abajo):
 
 ```bash
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 ```
 
 ## 🔌 Úsalo desde cualquier app de IA (MCP)
@@ -125,7 +125,7 @@ Agrégalo a Claude Code / Codex / Cursor / Claude Desktop:
 
 ```bash
 # directamente desde GitHub — no necesita npm publish; funciona en cuanto el repo es público:
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 
 # o desde un clon local (más confiable, completamente sin conexión):
 claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
@@ -138,14 +138,14 @@ claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLU
   "mcpServers": {
     "omnigen": {
       "command": "npx",
-      "args": ["-y", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
+      "args": ["-y", "-p", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
       "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
     }
   }
 }
 ```
 
-Una vez publicado en npm, también funciona el más corto `npx -y omnigen-vault omnigen-mcp`.
+Una vez publicado en npm, también funciona el más corto `npx -y -p omnigen-vault omnigen-mcp`.
 
 Luego pide a tu agente *"encuentra una montaña brumosa a la hora dorada"* o *"genera un zorro acuarela"* — llama la herramienta y obtiene la imagen de vuelta **en línea**.
 

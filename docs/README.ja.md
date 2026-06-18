@@ -112,7 +112,7 @@ const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 
 **4. または、MCP を経由してエージェントに直接接続** — 1 つのコマンドで、AI がボールトを検索し、画像をインラインで取得できます (詳細は以下):
 
 ```bash
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 ```
 
 ## 🔌 任意の AI アプリから使用 (MCP)
@@ -125,7 +125,7 @@ Claude Code / Codex / Cursor / Claude Desktop に追加:
 
 ```bash
 # straight from GitHub — no npm publish needed; works as soon as the repo is public:
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 
 # or from a local clone (most reliable, fully offline):
 claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
@@ -138,14 +138,14 @@ claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLU
   "mcpServers": {
     "omnigen": {
       "command": "npx",
-      "args": ["-y", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
+      "args": ["-y", "-p", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
       "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
     }
   }
 }
 ```
 
-npm に公開されると、より短い `npx -y omnigen-vault omnigen-mcp` も機能します。
+npm に公開されると、より短い `npx -y -p omnigen-vault omnigen-mcp` も機能します。
 
 その後、エージェントに*「霧のかかった山を朝焼けで見つけて」*または*「水彩画のキツネを生成して」*と聞いてください — ツールを呼び出し、画像を **インラインで** 取得します。
 

@@ -106,7 +106,7 @@ const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 
 **4. 또는 MCP를 통해 에이전트에 직접 연결** — 한 가지 명령, 에이전트는 보관소를 검색하고 이미지를 인라인으로 받습니다 (아래 참조):
 
 ```bash
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 ```
 
 ## 🔌 모든 AI 앱에서 사용하기 (MCP)
@@ -119,7 +119,7 @@ Claude Code / Codex / Cursor / Claude Desktop에 추가하세요:
 
 ```bash
 # GitHub에서 직접 — npm publish 필요 없음; 레포가 공개되면 바로 작동:
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 
 # or from a local clone (most reliable, fully offline):
 claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
@@ -132,14 +132,14 @@ claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLU
   "mcpServers": {
     "omnigen": {
       "command": "npx",
-      "args": ["-y", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
+      "args": ["-y", "-p", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
       "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
     }
   }
 }
 ```
 
-npm에 발행되면, 더 짧은 `npx -y omnigen-vault omnigen-mcp`도 작동합니다.
+npm에 발행되면, 더 짧은 `npx -y -p omnigen-vault omnigen-mcp`도 작동합니다.
 
 그러면 에이전트에 *"find a misty mountain at golden hour"* 또는 *"generate a watercolor fox"*를 요청하세요 — 도구를 호출하고 이미지를 **인라인으로** 받습니다.
 

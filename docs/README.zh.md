@@ -76,13 +76,13 @@ node bin/omnigen generate               # infinite, resumable, text-free (Ctrl-C
 **3. 查找和重用图像 — 一个机器可读的命令：**
 
 ```bash
-node bin/omnigen query “misty mountain at golden hour” --json --limit 5
+node bin/omnigen query "misty mountain at golden hour" --json --limit 5
 ```
 
 ```json
-[{ “path”: “~/.omnigen-vault/images/mountains-peaks/landscape/...png”,
-   “category”: “mountains-peaks”, “style”: “impressionist painting, broken color”,
-   “size”: “1536x1024”, “prompt”: “…”, “tags”: [“…”] }]
+[{ "path": "~/.omnigen-vault/images/mountains-peaks/landscape/...png",
+   "category": "mountains-peaks", "style": "impressionist painting, broken color",
+   "size": "1536x1024", "prompt": "…", "tags": ["…"] }]
 ```
 
 …或查询实时服务器的 JSON API，或从 Node 调用：
@@ -100,7 +100,7 @@ const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 
 **4. 或直接通过 MCP 将其接入您的智能体** — 一个命令，您的 AI 搜索库并获取内联图像（详见下方）：
 
 ```bash
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 ```
 
 ## 🔌 从任何 AI 应用使用它 (MCP)
@@ -113,7 +113,7 @@ Omnigen 提供一个 **MCP 服务器**，以便您的 AI 可以搜索库、**内
 
 ```bash
 # straight from GitHub — no npm publish needed; works as soon as the repo is public:
-claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y github:ezBuilder/omnigen-vault omnigen-mcp
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y -p github:ezBuilder/omnigen-vault omnigen-mcp
 
 # or from a local clone (most reliable, fully offline):
 claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
@@ -123,17 +123,17 @@ claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLU
 
 ```json
 {
-  “mcpServers”: {
-    “omnigen”: {
-      “command”: “npx”,
-      “args”: [“-y”, “github:ezBuilder/omnigen-vault”, “omnigen-mcp”],
-      “env”: { “OMNIGEN_VAULT_ROOT”: “~/.omnigen-vault” }
+  "mcpServers": {
+    "omnigen": {
+      "command": "npx",
+      "args": ["-y", "-p", "github:ezBuilder/omnigen-vault", "omnigen-mcp"],
+      "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
     }
   }
 }
 ```
 
-发布到 npm 后，较短的 `npx -y omnigen-vault omnigen-mcp` 也可以使用。
+发布到 npm 后，较短的 `npx -y -p omnigen-vault omnigen-mcp` 也可以使用。
 
 然后问您的智能体 *”找一个雾蒙蒙的山在金色时刻”* 或 *”生成一个水彩狐狸”* — 它调用工具并**内联**获取图像。
 
