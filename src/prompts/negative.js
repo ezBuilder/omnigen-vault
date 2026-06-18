@@ -26,3 +26,23 @@ export function buildPrompt(base, emphasis = 0) {
   }
   return prompt;
 }
+
+// --- Text-bearing UI/web design categories (allowText) ---
+// These INTENTIONALLY contain real interface text, so they skip the no-text
+// suffix, the no-text instructions, and the OCR text check.
+export const DESIGN_SUFFIX =
+  'High-fidelity UI/UX design mockup, realistic and pixel-crisp, with clean legible ' +
+  'interface text — headings, labels, buttons, and menu items — as a polished real product would have.';
+
+export const DESIGN_INSTRUCTIONS =
+  'You are generating a realistic, high-fidelity user-interface / web design mockup. ' +
+  'Render crisp, legible UI text (headings, labels, buttons, navigation, menu items) ' +
+  'exactly as a finished professional product would. Aim for a clean, modern, production-ready look.';
+
+/**
+ * Compose the final prompt for a text-bearing design image (no text suppression).
+ * @param {string} base
+ */
+export function buildDesignPrompt(base) {
+  return `${base.trim()}. ${DESIGN_SUFFIX}`;
+}

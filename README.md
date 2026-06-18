@@ -1,25 +1,32 @@
 <div align="center">
 
-# 🖼️ Omnigen Vault
+<img src="docs/assets/icon.png" width="104" alt="Omnigen" />
 
-**An infinite, text-free image engine + self-curating gallery — built to run forever.**
+# Omnigen Vault
+
+**An infinite, text-free image engine + self-curating multilingual gallery — and an MCP your AI drives.**
 
 Generate every kind of image in the world, in every art style ever made, with
-**zero text** in the frame — organized by category and resolution, thumbnailed,
-full-text indexed, and browsable in a slick multilingual gallery you can share
-with the world.
+**zero text** in the frame — organized by category & resolution, thumbnailed,
+**multilingual full-text indexed** (EN · KO · JA · ZH · ES), browsable in a slick
+web gallery, and instantly reusable by any AI via **MCP**.
 
-**English** · [한국어](docs/README.ko.md) · [日本語](docs/README.ja.md) · [中文](docs/README.zh.md) · [Español](docs/README.es.md)
+[**🔍 Live gallery →**](https://gallery.ezbuilder.app) · [**MCP for AI**](#-use-it-from-any-ai-app-mcp) · **English** · [한국어](docs/README.ko.md) · [日本語](docs/README.ja.md) · [中文](docs/README.zh.md) · [Español](docs/README.es.md)
 
 `Node ≥22` · **zero npm dependencies** · macOS menu-bar app · MIT
 
+<img src="docs/assets/hero-backdrop.png" width="760" alt="Omnigen — text-free AI image vault" />
+
 </div>
+
+> ### ⚠️ Unsupported backend — use at your own risk
+> Omnigen generates images by calling an **undocumented, private ChatGPT/Codex backend** using your **local ChatGPT auth tokens** — this is **not the official OpenAI API**. The contract may change or break without notice, and **heavy use may put your ChatGPT account at risk** (rate limits or restrictions). Your tokens are read at runtime and **never stored** by Omnigen, but you use this **at your own risk**. For production workloads use the official [OpenAI API](https://platform.openai.com/). Recommended for personal use.
 
 ---
 
 ## ✨ Why it's special
 
-- **Infinite by design.** A deterministic, resumable prompt engine crosses **60
+- **Infinite by design.** A deterministic, resumable prompt engine crosses **67
   real-world categories** × **270+ researched art styles** × lighting × palette ×
   composition × mood — over **1.6 billion** base combinations before it even
   starts recycling. Stop and resume anytime; it never repeats.
@@ -42,6 +49,11 @@ with the world.
   login, build galleries — all from a clean, icon-driven menu. Code-signed.
 - **AI-native.** A machine-readable query API so an agent can find and use the
   perfect image instantly (see below).
+
+<div align="center">
+<img src="docs/assets/showcase-1.png" width="384" alt="" />&nbsp;<img src="docs/assets/showcase-2.png" width="256" alt="" />
+<br><sub>Every image is 100% text-free and OCR-verified.</sub>
+</div>
 
 ## 🚀 Quick start
 
@@ -72,7 +84,7 @@ node bin/omnigen query "misty mountain at golden hour" --json --limit 5
 ```
 
 ```json
-[{ "path": "/Volumes/ezBackup/omnigen-vault/images/mountains-peaks/landscape/...png",
+[{ "path": "~/.omnigen-vault/images/mountains-peaks/landscape/...png",
    "category": "mountains-peaks", "style": "impressionist painting, broken color",
    "size": "1536x1024", "prompt": "…", "tags": ["…"] }]
 ```
@@ -91,26 +103,48 @@ import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
-## 🔌 Use it from any AI app (MCP + Skill)
+## 🔌 Use it from any AI app (MCP)
 
-**MCP server** — exposes `generate_image`, `search_images`, `get_image` and
-returns the PNG **inline**. Add to any MCP client (Claude Desktop, Codex, Cursor,
-Antigravity, …):
+Omnigen ships an **MCP server** so your AI can search the vault, **view images
+inline**, browse categories, and generate new ones — all **locally, on your own
+machine and your own quota**. Search works in **Korean / Japanese / Chinese /
+Spanish** too, and results come back with **localized** subject + prompt.
+
+**Tools:** `search_images` (localized; filter by category / orientation / rating) ·
+`get_image` (by id or path) · `list_categories` (localized labels + counts) ·
+`generate_image`.
+
+Add it to Claude Code / Codex / Cursor / Claude Desktop:
+
+```bash
+# zero-clone via npx (works once the repo is public / published):
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y omnigen-vault omnigen-mcp
+
+# or from a local clone:
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
+```
+
+…or a JSON config block for any MCP client (Cursor, Claude Desktop, Antigravity):
 
 ```json
 {
   "mcpServers": {
-    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+    "omnigen": {
+      "command": "npx",
+      "args": ["-y", "omnigen-vault", "omnigen-mcp"],
+      "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
+    }
   }
 }
 ```
 
-Then just ask your agent *"generate a watercolor fox"* — it calls the tool and
-gets the image back. (Codex CLI: `codex mcp add omnigen -- node …/bin/omnigen-mcp`.)
+Then ask your agent *"find a misty mountain at golden hour"* or *"generate a
+watercolor fox"* — it calls the tool and gets the image back **inline**.
 
 **Agent Skill** — for skill-aware agents, copy `skills/omnigen/` into your skills
-dir (`~/.claude/skills/`, `~/.codex/skills/`, or project `.agents/skills/`). It
-drives the CLI and hands back ready-to-use file paths.
+dir (`~/.claude/skills/`, `~/.codex/skills/`, or project `.agents/skills/`).
+
+**Stay current:** `omnigen upgrade` (git pull / npx) updates to the latest version.
 
 ## 🪟 Cross-platform & Windows
 
@@ -166,6 +200,7 @@ auto-detects the visitor's language.
 | `dedupe` | perceptual-hash near-duplicate detection |
 | `export --rating 4 --out DIR` | copy a curated set + contact sheet |
 | `retag` · `stats` · `doctor` · `init` | maintenance & diagnostics |
+| `upgrade [--dry-run]` | update to the latest version (git pull / npx) |
 
 Run `node bin/omnigen` for the full option reference.
 
@@ -173,7 +208,7 @@ Run `node bin/omnigen` for the full option reference.
 
 ```
 prompt taxonomy ─▶ Codex image backend ─▶ stream PNG ─▶ OCR text check
-   60 cats ×                                                  │ clean → save
+   67 cats ×                                                  │ clean → save
    270+ styles                                                ▼
         images/<category>/<resolution>/*.png  +  thumbs/  +  index.sqlite (FTS5)
                                                                   │

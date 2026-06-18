@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { buildHaystack } from './searchIndex.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS images (
@@ -63,6 +64,10 @@ CREATE TRIGGER IF NOT EXISTS images_ad AFTER DELETE ON images BEGIN
   VALUES ('delete', old.id, old.category, old.subject, old.style, old.mood, old.variant, old.prompt, old.tags);
 END;
 
+-- Multilingual search index: per-image haystack of English text + subject/category
+-- translations (ko/ja/zh/es), so non-English queries match. rowid = images.id.
+CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(haystack);
+
 CREATE TABLE IF NOT EXISTS kv_state (
   key   TEXT PRIMARY KEY,
   value TEXT
@@ -78,9 +83,11 @@ const INSERT_COLS = [
 ];
 
 function ftsQuery(raw) {
+  // Unicode letters/numbers so Korean/Japanese/Chinese queries tokenize too
+  // (the old /[a-z0-9]+/ stripped all non-Latin text → zero tokens).
   const tokens = String(raw || '')
     .toLowerCase()
-    .match(/[a-z0-9]+/g) || [];
+    .match(/[\p{L}\p{N}]+/gu) || [];
   if (!tokens.length) return null;
   // prefix-match each token; OR semantics so partial matches still return,
   // ranked by relevance (rows matching more/rarer terms score higher via bm25).
@@ -125,6 +132,8 @@ export function openVault(dbPath) {
     'INSERT INTO kv_state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   );
   const quarantineStmt = db.prepare('UPDATE images SET status = ?, abs_path = ?, rel_path = ? WHERE id = ?');
+  const searchDelStmt = db.prepare('DELETE FROM search_fts WHERE rowid = ?');
+  const searchInsStmt = db.prepare('INSERT INTO search_fts(rowid, haystack) VALUES (?, ?)');
 
   return {
     db,
@@ -136,7 +145,13 @@ export function openVault(dbPath) {
         return v === undefined ? null : v;
       });
       const info = insertStmt.run(...values);
-      return Number(info.lastInsertRowid) || null;
+      const id = Number(info.lastInsertRowid) || null;
+      // Index an English haystack so search works for any caller; the worker
+      // (and backfill) overwrite with the multilingual version via indexSearch.
+      if (info.changes && id && record.status !== 'quarantined') {
+        try { searchInsStmt.run(id, buildHaystack(record, {})); } catch {}
+      }
+      return id;
     },
 
     hasSha(sha) {
@@ -160,6 +175,16 @@ export function openVault(dbPath) {
       quarantineStmt.run(status, absPath, relPath, id);
     },
 
+    // Multilingual search index (rowid = image id). Idempotent per id.
+    indexSearch(id, haystack) {
+      searchDelStmt.run(id);
+      searchInsStmt.run(id, String(haystack || ''));
+    },
+
+    clearSearchIndex() {
+      db.exec('DELETE FROM search_fts');
+    },
+
     listByStatus(status, limit = 100000) {
       return db.prepare('SELECT * FROM images WHERE status = ? ORDER BY id LIMIT ?').all(status, limit);
     },
@@ -174,8 +199,8 @@ export function openVault(dbPath) {
       if (match) {
         const params = [match, status];
         let sql =
-          `SELECT i.* FROM images_fts f JOIN images i ON i.id = f.rowid ` +
-          `WHERE images_fts MATCH ? AND i.status = ?`;
+          `SELECT i.* FROM search_fts f JOIN images i ON i.id = f.rowid ` +
+          `WHERE search_fts MATCH ? AND i.status = ?`;
         if (category) {
           sql += ' AND i.category = ?';
           params.push(category);

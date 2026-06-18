@@ -1,49 +1,58 @@
 <div align="center">
 
-# 🖼️ Omnigen Vault
+<img src="assets/icon.png" width="104" alt="Omnigen" />
 
-**無限・テキストフリーの画像エンジン + 自動キュレーション型ギャラリー — 永続稼働を前提に設計。**
+# Omnigen Vault
 
-世界のあらゆる種類の画像を、これまで生み出されたあらゆる芸術スタイルで、フレーム内に
-**テキストを一切含めず**生成。カテゴリと解像度で整理し、サムネイル化、全文インデックス化して、
-世界に共有できる洗練された多言語ギャラリーで閲覧できます。
+**無限の、テキストなし画像エンジン + 自動キュレーション多言語ギャラリー — と、AIが操作するMCP。**
 
-[English](../README.md) · [한국어](README.ko.md) · **日本語** · [中文](README.zh.md) · [Español](README.es.md)
+あらゆる種類の画像をあらゆるアート スタイルで生成でき、
+**フレーム内にテキストがゼロ** — カテゴリと解像度で整理、サムネイル化、
+**多言語フルテキスト インデックス** (EN · KO · JA · ZH · ES) を備えた、閲覧可能なスリックな
+ウェブギャラリーで、任意のAIが **MCP** を通じてすぐに再利用できます。
 
-`Node ≥22` · **npm 依存ゼロ** · macOS メニューバーアプリ · MIT
+[**🔍 ライブギャラリー →**](https://gallery.ezbuilder.app) · [**AI向けMCP**](#-任意のaiアプリから使用mcp) · [English](../README.md) · [한국어](README.ko.md) · **日本語** · [中文](README.zh.md) · [Español](README.es.md)
+
+`Node ≥22` · **npmの依存なし** · macOS メニューバー アプリ · MIT
+
+<img src="assets/hero-backdrop.png" width="760" alt="Omnigen — text-free AI image vault" />
 
 </div>
 
+> ### ⚠️ サポートされていないバックエンド — 自己責任で使用してください
+> Omnigen は、**ドキュメント化されていない非公開の ChatGPT/Codex バックエンド** を呼び出すことで画像を生成します。あなたの**ローカル ChatGPT 認証トークン** を使用します — これは **公式の OpenAI API ではありません**。契約は予告なく変更または破損する可能性があり、**大量使用は ChatGPT アカウントにリスク** をもたらす可能性があります (レート制限または制限)。あなたのトークンはランタイムで読み込まれ、**Omnigen によって保存されることはありません**。ただし、**自己責任で使用** してください。本番ワークロードには公式の [OpenAI API](https://platform.openai.com/) を使用してください。個人使用に推奨されます。
+
 ---
 
-## ✨ 何が特別なのか
+## ✨ 特別な理由
 
-- **設計レベルで無限。** 決定論的かつ再開可能なプロンプトエンジンが、**60 の実世界カテゴリ**
-  × **270 以上の徹底調査された芸術スタイル** × ライティング × パレット ×
-  構図 × ムードを掛け合わせ、循環に入る前の段階で **16 億** を超える基本組み合わせを生み出します。
-  いつでも停止・再開でき、決して繰り返しません。
-- **地球上のあらゆるスタイル。** 写真（アナログ & デジタル）、古典 → 現代の絵画、世界各地・
-  民俗・先住民の伝統、イラストレーション / 3D / CGI、版画 & クラフト、現代的美学にわたる
-  270 以上のテキストフリーのビジュアルスタイルを、*あらゆる*バッチが単調な連続ではなく
-  視覚的に多様になるよう散りばめます。
-- **真にテキストフリー。** すべてのプロンプトがテキストを禁止し、各画像は **OCR で検証**
-  （テクスチャノイズを無視する信頼度フィルタ付き）。実際の文字が含まれるものは
-  自動的に再生成、または隔離されます。
-- **自己整理型のヴォルト。** `images/<category>/<resolution>/` に保存し、**サムネイル**を
-  生成。**FTS5 を備えた SQLite** ですべてを全文検索 + 評価 + 知覚ハッシュによる重複排除で
-  インデックス化します。
-- **2 つのギャラリー。** 自己完結型の静的な `gallery.html` と、**ライブの多言語 Web サーバー**
-  （検索、フィルタ、無限スクロール、ライトボックス、ブラウザ内評価）。Cloudflare Tunnel
-  経由で世界に公開できます。
-- **Mac をクラッシュさせない。** ディスク使用量の上限 + OS ボリュームガード + 空き容量の
-  下限。並行処理・低メモリ・即時キャンセル対応。
-- **ネイティブメニューバーアプリ。** 開始 / 停止、オプション選択、保存フォルダの変更、
-  ログイン時起動、ギャラリー構築 — すべてをクリーンでアイコン主導のメニューから。
-  コード署名済み。
-- **AI ネイティブ。** 機械可読のクエリ API により、エージェントが完璧な画像を即座に
-  見つけて利用できます（下記参照）。
+- **設計による無限。** 決定論的で再開可能なプロンプト エンジンが **67
+  つの実世界カテゴリ** × **270+ 研究されたアート スタイル** × ライティング × パレット ×
+  構成 × ムード — リサイクルを開始する前に **16 億以上の** 基本組み合わせ。いつでも停止して再開できます。繰り返されません。
+- **地球上のあらゆるスタイル。** 写真撮影
+  (アナログとデジタル)、古典 → 現代絵画、世界/フォーク/先住民の
+  伝統、イラスト/3D/CGI、版画と工芸、現代美学にわたる 270 以上のテキストなし視覚スタイル —
+  分散されているため、*すべての* バッチは視覚的に多様で、単調な実行ではありません。
+- **真のテキストなし。** すべてのプロンプトはテキストを禁止しており、各画像は **OCR で検証** されます
+  (信頼度フィルタリングテクスチャ ノイズを無視する);実際の文字を含むものはすべて
+  自動再生成または隔離されます。
+- **自己整理ボールト。** `images/<category>/<resolution>/` に保存し、
+  **サムネイル** を生成、**FTS5** フルテキスト検索 + 評価 + 知覚的ハッシュ除外の **SQLite** にすべてをインデックスします。
+- **2 つのギャラリー。** 自己完結したスタティック `gallery.html` と、**ライブ
+  多言語ウェブ サーバー** (検索、フィルター、無限スクロール、ライトボックス、ブラウザ内
+  評価) を Cloudflare Tunnel を通じて世界に公開できます。
+- **Mac をクラッシュさせません。** ハード ディスク使用量の上限 + OS ボリューム ガード + 空き容量の
+  フロア。並行、低メモリ、即座キャンセル。
+- **ネイティブ メニューバー アプリ。** 開始/停止、オプション選択、保存フォルダ変更、ログイン時の起動、ギャラリー構築 —
+  クリーンなアイコン駆動メニューからすべて。コード署名済み。
+- **AI ネイティブ。** エージェントが完璧な画像をすぐに見つけて使用できるように、マシン可読クエリ API (下記参照)。
 
-## 🚀 クイックスタート
+<div align="center">
+<img src="assets/showcase-1.png" width="384" alt="" />&nbsp;<img src="assets/showcase-2.png" width="256" alt="" />
+<br><sub>すべての画像は 100% テキストなしで OCR 検証済み。</sub>
+</div>
+
+## 🚀 クイック スタート
 
 ```bash
 git clone <your-repo-url> omnigen-vault && cd omnigen-vault
@@ -52,19 +61,19 @@ node bin/omnigen generate        # infinite, resumable generation (Ctrl-C to sto
 node bin/omnigen gallery && open "$(node bin/omnigen stats >/dev/null; echo)"  # build a gallery
 ```
 
-必要要件: **Node 22+**（組み込みの `node:sqlite` + `fetch` を使用 — `npm install` 不要）、
-ログイン済みの Codex/ChatGPT セッション、OCR 用の `tesseract`（`brew install tesseract`）、
-そしてヴォルト用にマウントされた外部 / データディスク。
+要件: **Node 22+** (組み込み `node:sqlite` + `fetch` を使用 — `npm install` なし)、
+ログイン済み Codex/ChatGPT セッション、OCR 用 `tesseract` (`brew install tesseract`)、
+ボールト用にマウントされた外部/データ ディスク。
 
-## 🤖 AI による超シンプルなインストールと利用
+## 🤖 AI 超シンプル インストール & 使用
 
-このツールは AI エージェントによる操作を前提に作られています。依存ゼロ、クローン 1 回:
+このツールはAI エージェントで操作するために構築されています。依存なし、ワンクローン:
 
 ```bash
 git clone <your-repo-url> omnigen-vault && cd omnigen-vault   # no npm install needed
 ```
 
-あとはエージェントが **1 つの機械可読コマンド**で画像を見つけて利用します:
+その後、エージェントは **1 つのマシン可読コマンド** で画像を見つけて使用します:
 
 ```bash
 # returns absolute paths + metadata as JSON — pipe straight into a tool call
@@ -72,50 +81,71 @@ node bin/omnigen query "misty mountain at golden hour" --json --limit 5
 ```
 
 ```json
-[{ "path": "/Volumes/ezBackup/omnigen-vault/images/mountains-peaks/landscape/...png",
+[{ "path": "~/.omnigen-vault/images/mountains-peaks/landscape/...png",
    "category": "mountains-peaks", "style": "impressionist painting, broken color",
    "size": "1536x1024", "prompt": "…", "tags": ["…"] }]
 ```
 
-あるいはライブサーバーの JSON API にクエリを送ることもできます:
+またはライブ サーバーの JSON API をクエリします:
 
 ```bash
 node bin/omnigen serve --port 8787
 curl 'localhost:8787/api/search?q=neon%20city&minRating=4&limit=10'
 ```
 
-プログラムから（Node）:
+プログラマティック (Node):
 
 ```js
 import { resolveConfig, queryVault } from './src/index.js';
 const hits = queryVault(resolveConfig(), { query: 'a red fox in snow', limit: 3 });
 ```
 
-## 🔌 任意の AI アプリから使う（MCP + Skill）
+## 🔌 任意のAIアプリから使用 (MCP)
 
-**MCP サーバー** — `generate_image`、`search_images`、`get_image` を公開し、PNG を
-**インラインで**返します。任意の MCP クライアント（Claude Desktop、Codex、Cursor、
-Antigravity、…）に追加できます:
+Omnigen は **MCP サーバー** を搭載しているため、AI はボールトを検索し、**画像をインラインで表示** でき、
+カテゴリを参照し、新しい画像を生成できます — すべて **ローカル、自分のマシンと自分のクォータで** 。検索は **韓国語 / 日本語 / 中国語 /
+スペイン語** でも機能し、結果は **ローカライズされた** サブジェクト + プロンプトで返されます。
+
+**ツール:** `search_images` (ローカライズ; カテゴリ / 向き / 評価でフィルター) ·
+`get_image` (ID またはパスで) · `list_categories` (ローカライズされたラベル + カウント) ·
+`generate_image`。
+
+Claude Code / Codex / Cursor / Claude Desktop に追加します:
+
+```bash
+# zero-clone via npx (works once the repo is public / published):
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- npx -y omnigen-vault omnigen-mcp
+
+# or from a local clone:
+claude mcp add omnigen --env OMNIGEN_VAULT_ROOT=~/.omnigen-vault -- node /ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp
+```
+
+…または任意の MCP クライアント (Cursor、Claude Desktop、Antigravity) 用の JSON 構成ブロック:
 
 ```json
 {
   "mcpServers": {
-    "omnigen": { "command": "node", "args": ["/ABSOLUTE/PATH/omnigen-vault/bin/omnigen-mcp"] }
+    "omnigen": {
+      "command": "npx",
+      "args": ["-y", "omnigen-vault", "omnigen-mcp"],
+      "env": { "OMNIGEN_VAULT_ROOT": "~/.omnigen-vault" }
+    }
   }
 }
 ```
 
-あとはエージェントに *"generate a watercolor fox"* と頼むだけ — ツールを呼び出して
-画像を返してくれます。（Codex CLI: `codex mcp add omnigen -- node …/bin/omnigen-mcp`。）
+その後、エージェントに*「黄金の時間に霧のかかった山を見つけて」*または*「水彩画のキツネを生成して」*と聞いてください — ツールを呼び出し、
+画像を **インラインで** 取得します。
 
-**Agent Skill** — スキル対応エージェント向けに、`skills/omnigen/` をスキルディレクトリ
-（`~/.claude/skills/`、`~/.codex/skills/`、またはプロジェクトの `.agents/skills/`）に
-コピーします。これが CLI を駆動し、すぐ使えるファイルパスを返してくれます。
+**エージェント スキル** — スキル対応エージェントの場合、`skills/omnigen/` をスキル
+ディレクトリ (`~/.claude/skills/`、`~/.codex/skills/`、またはプロジェクト `.agents/skills/`) にコピーします。
 
-## 🪟 クロスプラットフォーム & Windows
+**最新の状態に保つ:** `omnigen upgrade` (git pull / npx) は最新バージョンに更新します。
 
-**CLI、MCP サーバー、Web サーバーは純粋な Node** → macOS、Linux、Windows で動作します。
-macOS のメニューバーアプリの代わりに、すべてを CLI から設定します:
+## 🪟 クロス プラットフォーム & Windows
+
+**CLI、MCP サーバー、ウェブ サーバーはピュア Node** → macOS、Linux、
+Windows で実行されます。macOS メニューバー アプリの代わりに、CLI からすべてを構成します:
 
 ```bash
 omnigen config setup          # guided settings (save folder, size, concurrency, OCR, disk limit)
@@ -123,13 +153,13 @@ omnigen config set size fhd   # or set individual keys
 omnigen config show           # view saved + effective settings
 ```
 
-設定は `~/.omnigen-vault.json` に永続化され（パスは `$OMNIGEN_CONFIG` で上書き可能）、
-すべてのコマンドに適用されます。Windows では: Node ≥22 をインストール。サムネイル
-（macOS の `sips`）は適切にスキップされます（ギャラリーはフル画像にフォールバック）。
-OCR には Tesseract をインストールし、`OMNIGEN_TESSERACT` を `tesseract.exe` に向けるか、
-`--no-ocr` で実行します。ネイティブのメニューバー **アプリ** は macOS 専用です。
+設定は `~/.omnigen-vault.json` に保持されます (`$OMNIGEN_CONFIG` でパスをオーバーライド)
+すべてのコマンドに適用されます。Windows では、Node ≥22 をインストールします。サムネイル (macOS `sips`)
+はグレースフルにスキップされます (ギャラリーはフル画像にフォールバック)。OCR の場合は
+Tesseract をインストールし、`OMNIGEN_TESSERACT` を `tesseract.exe` に指し、`--no-ocr` を実行します。
+ネイティブ メニューバー **アプリ** は macOS のみです。
 
-## 🖥️ メニューバーアプリ（macOS）
+## 🖥️ メニューバー アプリ (macOS)
 
 ```bash
 bash app/build.sh                       # compiles, embeds icon, code-signs
@@ -137,51 +167,51 @@ ditto app/OmnigenVault.app /Applications/OmnigenVault.app
 open /Applications/OmnigenVault.app
 ```
 
-クリーンなメニューバーメニュー（SF Symbol アイコン、雑然としない）: 開始 / 停止トグル、
-ワード指定の生成、最近のプレビュー、ギャラリー構築、フォルダを開く、そして **設定** ウィンドウ
-（保存場所 · 並行数 · 解像度 · OCR · ディスク上限 · ログイン時起動 ·
-自動開始）。メニューにはライブの件数 + ディスク使用率を表示。終了時には常にワーカーを停止します。
+クリーンなメニューバー メニュー (SF シンボル アイコン、クラッタなし): 開始/停止トグル、単語で生成、
+ギャラリー構築、フォルダを開く、**設定** ウィンドウ
+(保存位置 · 同時実行性 · 解像度 · OCR · ディスク天井 · ログイン時の起動 ·
+自動開始)。メニューのライブ カウント + ディスク %。終了時は常にワーカーを停止します。
 
-## 🌐 世界に共有する（安全に）
+## 🌐 世界と共有する (安全に)
 
 ```bash
 node bin/omnigen serve --public --port 8787     # read-only, hardened
 cloudflared tunnel --url http://localhost:8787  # public HTTPS, no open port
 ```
 
-パブリックモードは **読み取り専用**（評価の書き戻しはオプトイン）で、画像は id 経由かつ
-realpath で限定したパス検証でのみ配信。レート制限、リクエストサイズの上限、厳格な
-セキュリティヘッダーを設定し、オプションの `--token` にも対応します。
-[SECURITY.md](../SECURITY.md) を参照してください。ギャラリー UI は多言語対応（EN/KO/JA/ZH/ES）で、
+パブリック モードは **読み取り専用** です (評価の書き込みはオプト イン)、ID でのみ画像を提供し、
+realpath コンファインパス検証、レート制限、リクエスト サイズの上限、厳格なセキュリティ ヘッダーを設定し、
+オプションの `--token` をサポートします。[SECURITY.md](../SECURITY.md) を参照してください。ギャラリー UI は多言語です (EN/KO/JA/ZH/ES)
 訪問者の言語を自動検出します。
 
 ## 🧭 コマンド
 
 | command | what it does |
 |---|---|
-| `generate` | 無限・再開可能・テキストフリーの生成（カテゴリ別または `--theme "word"`） |
-| `query "…" --json` | 全文検索 → AI 利用向けのパス + メタデータ |
-| `gallery` / `preview [N]` | 静的ギャラリーを構築 / 直近 N 件のプレビューページ |
-| `serve` | ライブの多言語ギャラリー + JSON API（世界に公開する `--public` 付き） |
-| `dedupe` | 知覚ハッシュによる準重複の検出 |
-| `export --rating 4 --out DIR` | キュレーションしたセット + コンタクトシートをコピー |
-| `retag` · `stats` · `doctor` · `init` | メンテナンス & 診断 |
+| `generate` | infinite, resumable, text-free generation (by-category or `--theme "word"`) |
+| `query "…" --json` | full-text search → paths + metadata for AI use |
+| `gallery` | build a static gallery (newest-first, search + filter + lightbox) |
+| `serve` | live multilingual gallery + JSON API (+ `--public` for the world) |
+| `dedupe` | perceptual-hash near-duplicate detection |
+| `export --rating 4 --out DIR` | copy a curated set + contact sheet |
+| `retag` · `stats` · `doctor` · `init` | maintenance & diagnostics |
+| `upgrade [--dry-run]` | update to the latest version (git pull / npx) |
 
-オプションの完全なリファレンスは `node bin/omnigen` を実行してください。
+完全なオプション リファレンスについては `node bin/omnigen` を実行してください。
 
 ## 🏗️ アーキテクチャ
 
 ```
 prompt taxonomy ─▶ Codex image backend ─▶ stream PNG ─▶ OCR text check
-   60 cats ×                                                  │ clean → save
+   67 cats ×                                                  │ clean → save
    270+ styles                                                ▼
         images/<category>/<resolution>/*.png  +  thumbs/  +  index.sqlite (FTS5)
                                                                   │
                           query · gallery · serve (live, i18n) ◀──┘
 ```
 
-ランタイム依存ゼロ — `node:sqlite`、`node:http`、`fetch`、そして macOS の
-`sips`/`tesseract` がすべての処理を担います。
+ゼロ ランタイム依存 — `node:sqlite`、`node:http`、`fetch`、macOS
+`sips`/`tesseract` すべての作業をします。
 
 ## 🧪 テスト
 

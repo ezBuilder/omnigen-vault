@@ -86,6 +86,7 @@ Usage:
   omnigen categories              List prompt categories
   omnigen doctor                  Check auth, disk, OCR, sqlite, dry-run a request
   omnigen init                    Create vault folders + database
+  omnigen upgrade [--dry-run]     Update to the latest version (git pull / npx)
   omnigen config [setup|show|set <k> <v>|path]   Persistent settings (cross-platform)
   omnigen serve [--public]        Live multilingual gallery + JSON API (see serve options)
 
@@ -105,7 +106,7 @@ generate options:
   --allow-system       Permit generating onto the OS/boot volume (unsafe; off by default)
   --category-caps STR  Skip categories at/over a cap, e.g. "birds=500,cats=200"
   --until HH:MM        Stop generating at this local clock time
-  --vault PATH         Override vault root (default /Volumes/ezBackup/omnigen-vault)
+  --vault PATH         Override vault root (default ~/.omnigen-vault, or $OMNIGEN_VAULT_ROOT)
   --dry-run            Build one request and print it; generate nothing
 
 export options:
@@ -439,6 +440,11 @@ export async function main(argv) {
     case 'init':
       cmdInit(config);
       return;
+    case 'upgrade': {
+      const { runUpgrade } = await import('./upgrade.js');
+      await runUpgrade({ dryRun: Boolean(flags['dry-run']) });
+      return;
+    }
     default:
       console.error(`Unknown command: ${command}\n`);
       console.log(HELP);

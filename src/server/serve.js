@@ -10,14 +10,42 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { openVault } from '../storage/db.js';
+import { localizeFields } from '../storage/localize.js';
 import { renderServerGallery } from './page.js';
+
+// Built SPA (web/dist) lives at the repo root, resolved from this file's location
+// (src/server/serve.js → ../../web/dist), independent of cwd or the mounted vault.
+const WEB_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+const WEB_DIST_REAL = (() => { try { return fs.realpathSync(WEB_DIST); } catch { return null; } })();
+const HAVE_SPA = Boolean(WEB_DIST_REAL && fs.existsSync(path.join(WEB_DIST_REAL, 'index.html')));
 
 const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp', '.gif': 'image/gif'
+  '.webp': 'image/webp', '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
+  '.json': 'application/json; charset=utf-8', '.map': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2', '.woff': 'font/woff', '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json'
 };
+
+// Orientation is derived from ACTUAL pixel aspect (what the viewer sees), not the
+// intended `bucket` — the backend doesn't always honor the requested orientation.
+const BUCKETS = new Set(['square', 'landscape', 'portrait', 'poster']);
+const ORIENT_SQL = {
+  landscape: 'width IS NOT NULL AND height IS NOT NULL AND width > height',
+  portrait: 'width IS NOT NULL AND height IS NOT NULL AND height > width',
+  square: 'width IS NOT NULL AND height IS NOT NULL AND width = height'
+};
+// Facet bucket = actual-pixel orientation (matches ORIENT_SQL above).
+const FACET_BUCKET_CASE =
+  `CASE WHEN width IS NULL OR height IS NULL THEN 'square'
+        WHEN width > height THEN 'landscape'
+        WHEN height > width THEN 'portrait'
+        ELSE 'square' END`;
 
 function securityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -26,9 +54,30 @@ function securityHeaders(res) {
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
-      "script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'"
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
+      "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
   );
+}
+
+// Serve a file from the built SPA (web/dist), path-confined like the image routes.
+// Returns true if a file was streamed, false otherwise (caller decides fallback/404).
+function serveStatic(res, urlPath, { immutable = false } = {}) {
+  if (!WEB_DIST_REAL) return false;
+  let rel;
+  try { rel = path.normalize(decodeURIComponent(urlPath)); } catch { return false; }
+  const real = safeWithinRoot(WEB_DIST_REAL, path.join(WEB_DIST_REAL, rel));
+  if (!real) return false;
+  let stat;
+  try { stat = fs.statSync(real); } catch { return false; }
+  if (!stat.isFile()) return false;
+  const type = MIME[path.extname(real).toLowerCase()] || 'application/octet-stream';
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
+  });
+  fs.createReadStream(real).on('error', () => res.end()).pipe(res);
+  return true;
 }
 
 function send(res, code, body, type = 'text/plain; charset=utf-8', extra = {}) {
@@ -75,6 +124,24 @@ export function serveVault(config, opts = {}) {
   const cats = vault.db.prepare("SELECT DISTINCT category FROM images WHERE status='active' ORDER BY category");
   const rateStmt = allowRating ? vault.db.prepare('UPDATE images SET rating = ? WHERE id = ?') : null;
 
+  // Facet counts (categories + resolution buckets) for the gallery filter UI.
+  const facetCatsStmt = vault.db.prepare(
+    "SELECT category name, COUNT(*) count FROM images WHERE status='active' GROUP BY category ORDER BY count DESC"
+  );
+  const facetBucketsStmt = vault.db.prepare(
+    `SELECT ${FACET_BUCKET_CASE} AS name, COUNT(*) count
+     FROM images WHERE status='active' GROUP BY name ORDER BY count DESC`
+  );
+  let facetsCache = null;
+  let facetsAt = 0;
+  function getFacets() {
+    const now = Date.now();
+    if (facetsCache && now - facetsAt < 60_000) return facetsCache;
+    facetsCache = { categories: facetCatsStmt.all(), buckets: facetBucketsStmt.all() };
+    facetsAt = now;
+    return facetsCache;
+  }
+
   // per-IP sliding-window rate limiter
   const WINDOW_MS = 10_000;
   const MAX_REQ = 240;
@@ -91,8 +158,8 @@ export function serveVault(config, opts = {}) {
     return e.n > MAX_REQ;
   }
 
-  function searchRows({ q, category, minRating, limit, offset, order }) {
-    const dir = order === 'old' ? 'ASC' : 'DESC';
+  function searchRows({ q, category, minRating, bucket, orientation, limit, offset, order, lang }) {
+    const dir = order === 'old' ? 'ASC' : order === 'top' ? 'DESC' : 'DESC';
     const lim = Math.min(Math.max(parseInt(limit, 10) || 60, 1), 200);
     const off = Math.max(parseInt(offset, 10) || 0, 0);
     const minR = Math.min(Math.max(parseInt(minRating, 10) || 0, 0), 5);
@@ -100,11 +167,18 @@ export function serveVault(config, opts = {}) {
     const params = [];
     if (category) { where.push('category = ?'); params.push(category); }
     if (minR) { where.push('COALESCE(rating,0) >= ?'); params.push(minR); }
-    const terms = String(q || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+    // exact resolution bucket
+    if (BUCKETS.has(String(bucket))) { where.push('bucket = ?'); params.push(String(bucket)); }
+    // orientation: prefer a non-empty bucket, else derive from aspect (NULL-safe)
+    const ori = String(orientation || '');
+    if (ORIENT_SQL[ori]) where.push(ORIENT_SQL[ori]);
+    // Unicode tokens so Korean/Japanese/Chinese queries tokenize (not just a-z0-9),
+    // matched against the multilingual search_fts haystack.
+    const terms = String(q || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
     if (terms.length) {
-      const fts = terms.map((t) => `"${t}"*`).join(' OR ');
+      const fts = terms.map((t) => `"${t.replace(/"/g, '')}"*`).join(' OR ');
       const ids = vault.db
-        .prepare('SELECT rowid FROM images_fts WHERE images_fts MATCH ? LIMIT 5000')
+        .prepare('SELECT rowid FROM search_fts WHERE search_fts MATCH ? LIMIT 5000')
         .all(fts)
         .map((r) => r.rowid);
       if (ids.length === 0) return { items: [], total: 0 };
@@ -112,25 +186,38 @@ export function serveVault(config, opts = {}) {
       params.push(...ids);
     }
     const whereSql = where.join(' AND ');
+    const orderSql = order === 'top'
+      ? 'COALESCE(rating,0) DESC, created_at DESC, id DESC'
+      : `created_at ${dir}, id ${dir}`;
     const total = vault.db.prepare(`SELECT COUNT(*) c FROM images WHERE ${whereSql}`).get(...params).c;
     const rows = vault.db
       .prepare(
-        `SELECT id, subject, category, size_label, width, height, COALESCE(rating,0) rating, prompt, style
-         FROM images WHERE ${whereSql} ORDER BY created_at ${dir}, id ${dir} LIMIT ? OFFSET ?`
+        `SELECT id, subject, category, size_label, width, height, bucket, COALESCE(rating,0) rating,
+                prompt, style, lighting, palette, composition, mood, variant
+         FROM images WHERE ${whereSql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`
       )
       .all(...params, lim, off);
-    const items = rows.map((r) => ({
-      id: r.id, subject: r.subject, category: r.category, size: r.size_label,
-      w: r.width, h: r.height, rating: r.rating, style: r.style, prompt: r.prompt,
-      thumb: `/thumb?id=${r.id}`, full: `/img?id=${r.id}`, download: `/download?id=${r.id}`
-    }));
+    const items = rows.map((r) => {
+      const loc = localizeFields(r, lang); // localized subject + composed prompt for the viewer's language
+      return {
+        id: r.id, subject: loc.subject, category: r.category, size: r.size_label,
+        w: r.width, h: r.height, bucket: r.bucket || '', rating: r.rating, style: r.style, prompt: loc.prompt,
+        thumb: `/thumb?id=${r.id}`, full: `/img?id=${r.id}`, download: `/download?id=${r.id}`
+      };
+    });
     return { items, total };
   }
 
-  function streamImage(res, id, { download = false } = {}) {
+  function streamImage(res, id, { full = false, download = false } = {}) {
     const row = byId.get(Number(id), 'active');
     if (!row) return send(res, 404, 'not found');
-    const candidate = download ? row.abs_path : row.thumb_abs || row.abs_path;
+    // download → original (attachment); full → original inline (lightbox preview);
+    // otherwise → thumbnail (grid). Each falls back when its preferred file is missing.
+    const candidate = download
+      ? row.abs_path
+      : full
+        ? row.abs_path || row.thumb_abs
+        : row.thumb_abs || row.abs_path;
     const real = candidate && safeWithinRoot(realRoot, candidate);
     if (!real) return send(res, 404, 'not found');
     const type = MIME[path.extname(real).toLowerCase()] || 'application/octet-stream';
@@ -167,22 +254,29 @@ export function serveVault(config, opts = {}) {
       }
       const p = url.pathname;
 
-      if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
-        return send(res, 200, renderServerGallery({ isPublic, allowRating, allowDownload, token }),
-          'text/html; charset=utf-8');
-      }
+      // --- JSON API + images (matched before static so /api/* never falls through) ---
       if (req.method === 'GET' && p === '/api/search') {
         const s = url.searchParams;
         return sendJson(res, 200, searchRows({
           q: s.get('q'), category: s.get('category'), minRating: s.get('minRating'),
-          limit: s.get('limit'), offset: s.get('offset'), order: s.get('order')
+          bucket: s.get('bucket'), orientation: s.get('orientation'),
+          limit: s.get('limit'), offset: s.get('offset'), order: s.get('order'),
+          lang: s.get('lang')
         }));
       }
       if (req.method === 'GET' && p === '/api/categories') {
         return sendJson(res, 200, { categories: cats.all().map((r) => r.category) });
       }
+      if (req.method === 'GET' && p === '/api/facets') return sendJson(res, 200, getFacets());
+      if (req.method === 'GET' && p === '/api/config') {
+        return sendJson(res, 200, {
+          ratingEnabled: !!allowRating, downloadEnabled: !!allowDownload, isPublic: !!isPublic
+        });
+      }
       if (req.method === 'GET' && p === '/thumb') return streamImage(res, url.searchParams.get('id'));
-      if (req.method === 'GET' && p === '/img') return streamImage(res, url.searchParams.get('id'));
+      // /img backs the lightbox preview: serve the original when downloads are allowed,
+      // else stay on the thumbnail so originals never leave a download-disabled server.
+      if (req.method === 'GET' && p === '/img') return streamImage(res, url.searchParams.get('id'), { full: allowDownload });
       if (req.method === 'GET' && p === '/download') {
         if (!allowDownload) return send(res, 403, 'downloads disabled');
         return streamImage(res, url.searchParams.get('id'), { download: true });
@@ -196,6 +290,25 @@ export function serveVault(config, opts = {}) {
         if (!(id > 0) || !(rating >= 0 && rating <= 5)) return sendJson(res, 400, { error: 'bad params' });
         const info = rateStmt.run(rating, id);
         return info.changes ? sendJson(res, 200, { ok: true, id, rating }) : sendJson(res, 404, { error: 'no row' });
+      }
+      if (p.startsWith('/api/')) return sendJson(res, 404, { error: 'not found' });
+
+      // --- static SPA (web/dist), or legacy vanilla gallery when no build is present ---
+      if (HAVE_SPA) {
+        if (req.method === 'GET' && p.startsWith('/assets/')) {
+          if (serveStatic(res, p, { immutable: true })) return;
+          return send(res, 404, 'not found');
+        }
+        if (req.method === 'GET') {
+          // a top-level file (favicon, manifest, …) if it exists, else SPA index for client routing
+          if (p !== '/' && /\.[a-z0-9]+$/i.test(p) && serveStatic(res, p)) return;
+          if (serveStatic(res, '/index.html')) return;
+        }
+        return send(res, 404, 'not found');
+      }
+      if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
+        return send(res, 200, renderServerGallery({ isPublic, allowRating, allowDownload, token }),
+          'text/html; charset=utf-8');
       }
       return send(res, 404, 'not found');
     } catch (err) {
@@ -218,6 +331,9 @@ export function serveVault(config, opts = {}) {
         log(`  mode: ${isPublic ? 'PUBLIC read-only' : 'local'}` +
           `${allowRating ? ' · rating ON' : ' · rating OFF'}${allowDownload ? ' · downloads ON' : ''}` +
           `${token ? ' · token required' : ''}`);
+        log(HAVE_SPA
+          ? `  ui: SPA (web/dist)`
+          : `  ui: legacy gallery — run \`npm run build\` to build the web/ SPA`);
         if (isPublic) log(`  expose safely: cloudflared tunnel --url http://localhost:${port}`);
         resolve(server);
       });

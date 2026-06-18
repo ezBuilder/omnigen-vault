@@ -16,7 +16,12 @@ import { openVault } from '../storage/db.js';
 import { makeThumbnail, thumbnailAvailable } from '../media/thumbnail.js';
 import { queryVault } from '../query.js';
 import { detectText } from '../text/ocr.js';
+import { CATEGORY_LABELS } from '../prompts/categoryLabels.js';
 
+const PKG = (() => {
+  try { return JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')); }
+  catch { return { version: '0.0.0' }; }
+})();
 const PROTOCOL_VERSION = '2024-11-05';
 const config = resolveConfig();
 const provider = createCodexProvider(config);
@@ -45,13 +50,17 @@ const TOOLS = [
   {
     name: 'search_images',
     description:
-      'Full-text search the existing vault and return matching images (paths + metadata, and the top match inline). ' +
-      'Use to reuse an already-generated image instead of making a new one.',
+      'Full-text search the existing vault and return matching images (id, path, localized ' +
+      'subject + prompt, metadata; plus the top match inline). Multilingual: queries in Korean/' +
+      'Japanese/Chinese/Spanish work. Use to reuse an already-generated image instead of making a new one.',
     inputSchema: {
       type: 'object', additionalProperties: false, required: ['query'],
       properties: {
-        query: { type: 'string' },
-        category: { type: 'string' },
+        query: { type: 'string', description: 'keywords in any supported language' },
+        category: { type: 'string', description: 'restrict to a category slug (see list_categories)' },
+        orientation: { type: 'string', description: 'square|landscape|portrait' },
+        min_rating: { type: 'number', description: 'only images rated >= this (0-5)' },
+        lang: { type: 'string', description: 'localize subject + prompt: en|ko|ja|zh|es (default en)' },
         limit: { type: 'number', description: 'max results (default 5)' },
         inline_top: { type: 'boolean', description: 'also return the top match inline (default true)' }
       }
@@ -59,10 +68,21 @@ const TOOLS = [
   },
   {
     name: 'get_image',
-    description: 'Return a specific vault image inline by absolute path.',
+    description: 'Return a specific vault image inline by its id (from search_images) or absolute path.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['path'],
-      properties: { path: { type: 'string' } }
+      type: 'object', additionalProperties: false,
+      properties: {
+        id: { type: 'number', description: 'image id from search_images' },
+        path: { type: 'string', description: 'absolute path inside the vault' }
+      }
+    }
+  },
+  {
+    name: 'list_categories',
+    description: 'List all vault categories with localized labels and image counts, for browsing/filtering.',
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: { lang: { type: 'string', description: 'label language: en|ko|ja|zh|es (default en)' } }
     }
   }
 ];
@@ -125,9 +145,20 @@ async function doGenerate(args) {
 }
 
 function doSearch(args) {
-  const rows = queryVault(config, { query: String(args.query || ''), category: args.category || null, limit: args.limit || 5 });
+  const rows = queryVault(config, {
+    query: String(args.query || ''),
+    category: args.category || null,
+    orientation: args.orientation || null,
+    minRating: args.min_rating || 0,
+    lang: String(args.lang || 'en'),
+    limit: args.limit || 5
+  });
   if (!rows.length) return { content: [{ type: 'text', text: `No matches for "${args.query}".` }] };
-  const content = [{ type: 'text', text: JSON.stringify(rows.map((r) => ({ path: r.path, category: r.category, subject: r.subject, style: r.style, size: r.size })), null, 2) }];
+  const meta = rows.map((r) => ({
+    id: r.id, path: r.path, category: r.category, subject: r.subject,
+    prompt: r.prompt, size: r.size, orientation: r.orientation, rating: r.rating
+  }));
+  const content = [{ type: 'text', text: JSON.stringify(meta, null, 2) }];
   if (args.inline_top !== false) {
     try {
       const top = rows[0];
@@ -139,18 +170,47 @@ function doSearch(args) {
   return { content };
 }
 
+function imagePathById(id) {
+  const vault = openVault(config.dbPath);
+  try {
+    const row = vault.db.prepare('SELECT abs_path FROM images WHERE id = ? AND status = ?').get(Number(id), 'active');
+    return row ? row.abs_path : null;
+  } finally {
+    vault.close();
+  }
+}
+
 async function doGet(args) {
-  const p = String(args.path || '');
+  let p = String(args.path || '');
+  if (!p && args.id != null) {
+    p = imagePathById(args.id);
+    if (!p) throw new Error(`no active image with id ${args.id}`);
+  }
+  if (!p) throw new Error('id or path is required');
   const real = fs.realpathSync(path.resolve(p));
   const root = fs.realpathSync(path.resolve(config.vaultRoot));
   if (!(real === root || real.startsWith(root + path.sep))) throw new Error('path is outside the vault');
   return { content: [{ type: 'image', data: fs.readFileSync(real).toString('base64'), mimeType: 'image/png' }] };
 }
 
+function doCategories(args) {
+  const lang = String(args.lang || 'en');
+  const vault = openVault(config.dbPath);
+  try {
+    const out = vault.stats().byCategory.map((c) => {
+      const e = CATEGORY_LABELS[c.category];
+      return { category: c.category, label: (e && (e[lang] || e.en)) || c.category, count: c.c };
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
+  } finally {
+    vault.close();
+  }
+}
+
 async function handle(method, params) {
   switch (method) {
     case 'initialize':
-      return { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'omnigen-vault', version: '0.1.0' } };
+      return { protocolVersion: PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'omnigen-vault', version: PKG.version } };
     case 'ping':
       return {};
     case 'tools/list':
@@ -160,6 +220,7 @@ async function handle(method, params) {
       if (name === 'generate_image') return await doGenerate(a);
       if (name === 'search_images') return doSearch(a);
       if (name === 'get_image') return await doGet(a);
+      if (name === 'list_categories') return doCategories(a);
       throw new Error(`unknown tool: ${name}`);
     }
     default:

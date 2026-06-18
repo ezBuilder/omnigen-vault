@@ -5,7 +5,7 @@
 // "by type". Within a category we mixed-radix decode the subject x dimension
 // product; once that product is exhausted we advance the `variant` dimension,
 // so the stream never runs dry.
-import { CATEGORIES, DIMENSIONS, ORIENTATION_SIZE } from './taxonomy.js';
+import { CATEGORIES, DIMENSIONS, DESIGN_DIMENSIONS, ORIENTATION_SIZE } from './taxonomy.js';
 import { slug } from '../storage/paths.js';
 
 // Coprime multiplier (a known MINSTD LCG prime) used to scatter the combination
@@ -46,14 +46,19 @@ export function createPromptStream({ categories = null, theme = null, orientatio
   }
 
   const dims = DIMENSIONS;
-  // Per-category combination product (subjects x 5 shared dimensions).
+  // Text-bearing design categories cross the subject with design dimensions instead
+  // of the artistic ones (style/lighting/palette make no sense for UI mockups).
+  const DESIGN = [DESIGN_DIMENSIONS.aesthetic, DESIGN_DIMENSIONS.theme, DESIGN_DIMENSIONS.accent];
+  // Per-category combination product (subjects x its dimension set).
   const productOf = (cat) =>
-    cat.subjects.length *
-    dims.style.length *
-    dims.lighting.length *
-    dims.palette.length *
-    dims.composition.length *
-    dims.mood.length;
+    cat.allowText
+      ? cat.subjects.length * DESIGN.reduce((p, d) => p * d.length, 1)
+      : cat.subjects.length *
+        dims.style.length *
+        dims.lighting.length *
+        dims.palette.length *
+        dims.composition.length *
+        dims.mood.length;
 
   /**
    * Resolve the prompt spec for a global index.
@@ -74,6 +79,36 @@ export function createPromptStream({ categories = null, theme = null, orientatio
     // Affine map with a coprime multiplier → bijective per category (unique +
     // complete). Without it a whole cursor window shares one look.
     const combo = ((localIndex % product) * COMBO_STRIDE + catIdx * CAT_STRIDE) % product;
+    const variantWrap = dims.variant[variantLevel % dims.variant.length];
+
+    // Text-bearing design categories: cross subject x (aesthetic, theme, accent).
+    if (cat.allowText) {
+      const radixes = [cat.subjects.length, ...DESIGN.map((d) => d.length)];
+      const [dsi, ai, ti, ci] = decodeMixedRadix(combo, radixes);
+      const subject = cat.subjects[dsi];
+      const aesthetic = DESIGN[0][ai];
+      const theme = DESIGN[1][ti];
+      const accent = DESIGN[2][ci];
+      const basePrompt = [subject, aesthetic, theme, accent]
+        .concat(variantWrap ? [variantWrap] : [])
+        .join(', ');
+      return {
+        globalIndex,
+        comboKey: `${cat.name}#${combo}#v${variantLevel}`,
+        category: cat.name,
+        orientation: cat.orientation,
+        defaultSize: ORIENTATION_SIZE[cat.orientation] || '2048x2048',
+        allowText: true,
+        subject,
+        style: aesthetic,
+        lighting: null,
+        palette: accent,
+        composition: null,
+        mood: theme,
+        variant: variantWrap,
+        basePrompt
+      };
+    }
 
     const radixes = [
       cat.subjects.length,

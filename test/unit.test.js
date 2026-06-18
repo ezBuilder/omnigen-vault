@@ -16,6 +16,8 @@ import { CATEGORY_NAMES } from '../src/prompts/taxonomy.js';
 import { diskUsage, diskLimitStatus, isOnSystemVolume } from '../src/storage/disk.js';
 import { buildGallery } from '../src/gallery/build.js';
 import { resolveConfig } from '../src/config.js';
+import { parseRateLimits, pickPause } from '../src/codex/rateLimit.js';
+import { CATEGORY_LABELS } from '../src/prompts/categoryLabels.js';
 
 test('prompt stream is deterministic and round-robins categories', () => {
   const a = createPromptStream();
@@ -222,5 +224,65 @@ test('vault inserts, dedupes by sha, and full-text searches', () => {
   } finally {
     v.close();
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('parseRateLimits reads the 5h (primary) and weekly (secondary) windows', () => {
+  // real header shape; the codename segment ("bengalfox") is matched by pattern
+  const headers = {
+    'x-codex-bengalfox-primary-window-minutes': '300',
+    'x-codex-bengalfox-primary-used-percent': '100',
+    'x-codex-bengalfox-primary-reset-at': '1781732938',
+    'x-codex-bengalfox-secondary-window-minutes': '10080',
+    'x-codex-bengalfox-secondary-used-percent': '40',
+    'x-codex-bengalfox-secondary-reset-at': '1782319738',
+    'x-codex-bengalfox-primary-over-secondary-limit-percent': '0' // must NOT be read as used-percent
+  };
+  const rl = parseRateLimits(headers);
+  assert.equal(rl.primary.windowMinutes, 300);
+  assert.equal(rl.primary.usedPercent, 100);
+  assert.equal(rl.primary.resetAtMs, 1781732938 * 1000);
+  assert.equal(rl.secondary.windowMinutes, 10080);
+  assert.equal(rl.secondary.usedPercent, 40);
+  assert.equal(rl.secondary.resetAtMs, 1782319738 * 1000);
+});
+
+test('pickPause: no pause when nothing is exhausted', () => {
+  const rl = { primary: { usedPercent: 0, resetAtMs: 5000 }, secondary: { usedPercent: 10, resetAtMs: 9000 } };
+  assert.equal(pickPause(rl, { nowMs: 0 }), null);
+});
+
+test('pickPause: 5h window exhausted → pause until its reset', () => {
+  const rl = { primary: { usedPercent: 100, resetAtMs: 5000 }, secondary: { usedPercent: 20, resetAtMs: 9000 } };
+  assert.deepEqual(pickPause(rl, { nowMs: 0 }), { scope: '5h', resetAtMs: 5000 });
+});
+
+test('pickPause: both exhausted → wait for the later (weekly) reset', () => {
+  const rl = { primary: { usedPercent: 100, resetAtMs: 5000 }, secondary: { usedPercent: 100, resetAtMs: 9000 } };
+  assert.deepEqual(pickPause(rl, { nowMs: 0 }), { scope: 'weekly', resetAtMs: 9000 });
+});
+
+test('pickPause: force429 with no clear used-percent falls back to Retry-After', () => {
+  const rl = { primary: { usedPercent: 0, resetAtMs: null }, secondary: { usedPercent: 0, resetAtMs: null } };
+  assert.deepEqual(pickPause(rl, { nowMs: 1000, retryAfterSec: 30, force429: true }), {
+    scope: 'rate',
+    resetAtMs: 1000 + 30 * 1000
+  });
+});
+
+test('every category has a localized label in all 5 languages (taxonomy ↔ labels in sync)', () => {
+  const LANGS = ['en', 'ko', 'ja', 'zh', 'es'];
+  // 1. every taxonomy category has a label entry
+  for (const name of CATEGORY_NAMES) {
+    assert.ok(CATEGORY_LABELS[name], `missing category label for "${name}"`);
+    for (const lang of LANGS) {
+      const v = CATEGORY_LABELS[name][lang];
+      assert.ok(typeof v === 'string' && v.trim().length > 0, `"${name}" missing ${lang} label`);
+    }
+  }
+  // 2. no stale label keys that aren't real categories
+  const names = new Set(CATEGORY_NAMES);
+  for (const key of Object.keys(CATEGORY_LABELS)) {
+    assert.ok(names.has(key), `stale category label "${key}" not in taxonomy`);
   }
 });

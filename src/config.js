@@ -36,7 +36,7 @@ export function resolveConfig(overrides = {}) {
   const vaultRoot =
     overrides.vaultRoot ||
     env.OMNIGEN_VAULT_ROOT ||
-    '/Volumes/ezBackup/omnigen-vault';
+    path.join(os.homedir(), '.omnigen-vault');
 
   return {
     // --- backend / auth ---

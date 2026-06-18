@@ -1,8 +1,8 @@
 {
   "name": "omnigen-vault",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "files": ["bin", "src", "scripts/register-mcp.mjs", "LICENSE", "README.md", "ATTRIBUTIONS.md"],
   "description": "Infinite text-free image generator + SQLite-indexed vault. Reuses local Codex/ChatGPT auth to generate PNGs across an exhaustive prompt taxonomy, OCR-verifies they contain no text, organizes them by category on a backup disk, and indexes them for instant AI retrieval.",
   "main": "./src/index.js",
   "exports": {
@@ -19,7 +19,12 @@
     "mcp": "node bin/omnigen-mcp",
     "stats": "node bin/omnigen stats",
     "doctor": "node bin/omnigen doctor",
-    "test": "node --test"
+    "test": "node --test",
+    "web:install": "npm --prefix web install",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:preview": "npm --prefix web run preview",
+    "build": "npm --prefix web run build"
   },
   "engines": {
     "node": ">=22"

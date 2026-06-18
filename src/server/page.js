@@ -6,23 +6,23 @@ const I18N = {
   en: { title: 'Omnigen Gallery', search: 'Search prompts, subjects…', all: 'All categories',
         ratingAll: 'Any rating', newest: 'Newest', oldest: 'Oldest', more: 'Load more',
         none: 'No images found', dl: 'Download', copy: 'Copy prompt', copied: 'Copied!',
-        results: 'images', rate: 'Rate' },
+        results: 'images', rate: 'Rate', clear: 'Clear rating' },
   ko: { title: '옴니젠 갤러리', search: '프롬프트·주제 검색…', all: '모든 종류',
         ratingAll: '별점 전체', newest: '최신순', oldest: '오래된순', more: '더 보기',
         none: '이미지 없음', dl: '다운로드', copy: '프롬프트 복사', copied: '복사됨!',
-        results: '장', rate: '별점' },
+        results: '장', rate: '별점', clear: '별점 지우기' },
   ja: { title: 'オムニジェン ギャラリー', search: 'プロンプト・被写体を検索…', all: 'すべて',
         ratingAll: '評価すべて', newest: '新しい順', oldest: '古い順', more: 'もっと見る',
         none: '画像なし', dl: 'ダウンロード', copy: 'プロンプトをコピー', copied: 'コピー!',
-        results: '枚', rate: '評価' },
+        results: '枚', rate: '評価', clear: '評価を消す' },
   zh: { title: 'Omnigen 画廊', search: '搜索提示词、主题…', all: '全部分类',
         ratingAll: '所有评分', newest: '最新', oldest: '最早', more: '加载更多',
         none: '没有图片', dl: '下载', copy: '复制提示词', copied: '已复制!',
-        results: '张', rate: '评分' },
+        results: '张', rate: '评分', clear: '清除评分' },
   es: { title: 'Galería Omnigen', search: 'Buscar prompts, temas…', all: 'Todas',
         ratingAll: 'Cualquier valoración', newest: 'Recientes', oldest: 'Antiguos', more: 'Cargar más',
         none: 'Sin imágenes', dl: 'Descargar', copy: 'Copiar prompt', copied: '¡Copiado!',
-        results: 'imágenes', rate: 'Valorar' }
+        results: 'imágenes', rate: 'Valorar', clear: 'Quitar valoración' }
 };
 
 export function renderServerGallery({ isPublic = true, allowRating = false, allowDownload = true } = {}) {
@@ -72,11 +72,12 @@ export function renderServerGallery({ isPublic = true, allowRating = false, allo
   #empty{display:none;text-align:center;color:var(--muted);padding:60px}
   /* lightbox */
   #lb{position:fixed;inset:0;z-index:50;background:rgba(4,6,10,.96);display:none;opacity:0;transition:opacity .2s;
-      padding:24px;flex-direction:column;align-items:center;justify-content:center;gap:16px;overflow:auto}
+      flex-direction:column;align-items:center;overflow:hidden}
   #lb.open{display:flex;opacity:1}
-  #lb img{max-width:min(94vw,1300px);max-height:74vh;border-radius:12px;transform:scale(.97);transition:transform .25s;box-shadow:0 24px 80px rgba(0,0,0,.6)}
+  #lbimgwrap{flex:1;min-height:0;width:100%;display:flex;align-items:center;justify-content:center;padding:24px 24px 12px;box-sizing:border-box}
+  #lb img{max-width:min(94vw,1300px);max-height:100%;border-radius:12px;transform:scale(.97);transition:transform .25s;box-shadow:0 24px 80px rgba(0,0,0,.6)}
   #lb.open img{transform:scale(1)}
-  .info{max-width:min(94vw,1300px);width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .info{flex:none;max-width:min(94vw,1300px);width:100%;margin:0 0 16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;max-height:42vh;overflow:auto;box-sizing:border-box}
   .info .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .info .prompt{white-space:pre-wrap;color:#c7cedd;font-size:12.5px;margin:9px 0 0}
   .btn{background:#222b3c;color:var(--fg);border:1px solid #2f394d;border-radius:9px;padding:7px 13px;cursor:pointer;font-size:12px;transition:background .15s}
@@ -109,7 +110,7 @@ export function renderServerGallery({ isPublic = true, allowRating = false, allo
 <div id="empty"></div>
 <button class="nav" id="prev">‹</button><button class="nav" id="next">›</button>
 <div id="lb">
-  <img id="lbimg" alt="">
+  <div id="lbimgwrap"><img id="lbimg" alt=""></div>
   <div class="info">
     <div class="row"><strong id="lbsub"></strong><span class="chip" id="lbcat"></span><span class="chip" id="lbsize"></span>
       <span class="grow"></span>
@@ -181,6 +182,9 @@ function fetchPage(){
   }).catch(function(){state.loading=false;});
 }
 
+function setRating(it,nv){ fetch(api('/api/rate'),{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify({id:it.id,rating:nv})}).then(function(r){return r.json()})
+  .then(function(){it.rating=nv;openAt(cur);}).catch(function(){}); }
 function openAt(i){ if(i<0||i>=items.length)return; cur=i; var it=items[i];
   document.getElementById('lbimg').src=api(it.full);
   document.getElementById('lbsub').textContent=it.subject;
@@ -190,15 +194,23 @@ function openAt(i){ if(i<0||i>=items.length)return; cur=i; var it=items[i];
   var dlA=document.getElementById('lbdl');
   if(CFG.downloadEnabled){dlA.style.display='';dlA.href=api(it.download);} else dlA.style.display='none';
   var st=document.getElementById('lbstars');
-  if(CFG.ratingEnabled){ st.style.display=''; st.innerHTML=''; (function(){ for(var k=1;k<=5;k++){ (function(v){
-    var sp=document.createElement('span'); sp.textContent='★'; sp.style.color=(v<=it.rating?'var(--star)':'#454e60');
-    sp.onclick=function(e){e.stopPropagation(); fetch(api('/api/rate'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:it.id,rating:v})})
-      .then(function(r){return r.json()}).then(function(){it.rating=v;openAt(cur);}); };
-    st.appendChild(sp);} )(k); } })(); } else st.style.display='none';
+  if(CFG.ratingEnabled){ st.style.display=''; st.innerHTML='';
+    for(var k=1;k<=5;k++){ (function(v){
+      var sp=document.createElement('span'); sp.textContent='★'; sp.title=t('rate');
+      sp.style.color=(v<=it.rating?'var(--star)':'#454e60');
+      sp.onclick=function(e){e.stopPropagation(); setRating(it, it.rating===v?0:v);}; // click the lit star to clear
+      st.appendChild(sp);
+    })(k); }
+    if(it.rating>0){ var cl=document.createElement('span'); cl.textContent='✕'; cl.title=t('clear');
+      cl.style.cssText='font-size:13px;color:#6b7488;margin-left:7px';
+      cl.onmouseover=function(){this.style.color='#ff7a7a';}; cl.onmouseout=function(){this.style.color='#6b7488';};
+      cl.onclick=function(e){e.stopPropagation(); setRating(it,0);}; st.appendChild(cl);
+    }
+  } else st.style.display='none';
   lb.classList.add('open');
 }
 document.getElementById('lbcopy').onclick=function(e){e.stopPropagation();var it=items[cur];if(it&&navigator.clipboard){navigator.clipboard.writeText(it.prompt||'');this.textContent=t('copied');var b=this;setTimeout(function(){b.textContent=t('copy')},1200);}};
-lb.onclick=function(e){if(e.target===lb||e.target.id==='lbimg')lb.classList.remove('open');};
+lb.onclick=function(e){if(e.target===lb||e.target.id==='lbimgwrap'||e.target.id==='lbimg')lb.classList.remove('open');};
 document.getElementById('prev').onclick=function(e){e.stopPropagation();openAt(cur-1);};
 document.getElementById('next').onclick=function(e){e.stopPropagation();if(cur+1>=items.length)fetchPage();openAt(cur+1);};
 document.addEventListener('keydown',function(e){ if(e.key==='Escape')lb.classList.remove('open');

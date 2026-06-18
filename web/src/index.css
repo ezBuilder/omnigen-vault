@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 23% 6%;
+    --foreground: 220 14% 91%;
+    --card: 220 20% 9%;
+    --card-foreground: 220 14% 91%;
+    --popover: 220 22% 8%;
+    --popover-foreground: 220 14% 91%;
+    --primary: 217 91% 71%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 220 16% 15%;
+    --secondary-foreground: 220 14% 91%;
+    --muted: 220 16% 15%;
+    --muted-foreground: 220 10% 60%;
+    --accent: 220 16% 17%;
+    --accent-foreground: 220 14% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+  }
+  .dark {
+    --background: 220 23% 6%;
+    --foreground: 220 14% 91%;
+    --card: 220 20% 9%;
+    --card-foreground: 220 14% 91%;
+    --popover: 220 22% 8%;
+    --popover-foreground: 220 14% 91%;
+    --primary: 217 91% 71%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 220 16% 15%;
+    --secondary-foreground: 220 14% 91%;
+    --muted: 220 16% 15%;
+    --muted-foreground: 220 10% 60%;
+    --accent: 220 16% 17%;
+    --accent-foreground: 220 14% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  /* hide the native type=search clear button — we render our own */
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+}
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+}

@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const BIN = '/Users/ezbuilder/workspace/omnigen-vault/bin/omnigen-mcp';
+const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../bin/omnigen-mcp');
 const H = os.homedir();
 
 const targets = [

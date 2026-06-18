@@ -14,16 +14,27 @@ import { UNSUPPORTED_WARNING } from './config.js';
 import { resolveSize } from './sizes.js';
 import { createCodexProvider } from './codex/provider.js';
 import { createPromptStream } from './prompts/promptStream.js';
-import { buildPrompt, NO_TEXT_INSTRUCTIONS } from './prompts/negative.js';
+import { buildPrompt, NO_TEXT_INSTRUCTIONS, buildDesignPrompt, DESIGN_INSTRUCTIONS } from './prompts/negative.js';
 import { detectText, ocrAvailable } from './text/ocr.js';
 import { decodeImage, writeImage } from './storage/saveImage.js';
 import { imagePath, slug } from './storage/paths.js';
 import { openVault } from './storage/db.js';
+import { buildHaystack } from './storage/searchIndex.js';
 import { assertSafeVolume, diskLimitStatus, diskLimitReason } from './storage/disk.js';
 import { makeThumbnail, thumbnailAvailable } from './media/thumbnail.js';
 import { parseCaps, overCapCategories, parseUntil } from './quota.js';
+import { pickPause, scopeLabel } from './codex/rateLimit.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Subject translations (ko/ja/zh/es) for the multilingual search index. Optional.
+const SUBJECT_TR = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(new URL('./prompts/subjectTranslations.json', import.meta.url), 'utf8'));
+  } catch {
+    return {};
+  }
+})();
 
 function readPngSize(buffer) {
   if (buffer.length < 24 || buffer.toString('ascii', 12, 16) !== 'IHDR') {
@@ -102,7 +113,11 @@ export async function runWorker(config, { log = console.log } = {}) {
     duplicates: 0,
     errors: 0,
     sinceCheckpoint: 0,
-    startMs: Date.now()
+    startMs: Date.now(),
+    pauseUntilMs: 0, // wall-clock epoch to resume at when a usage window is exhausted
+    pauseScope: null,
+    pauseAnnounced: false,
+    rateLimitHits: 0
   };
 
   const grab = () => {
@@ -115,6 +130,39 @@ export async function runWorker(config, { log = console.log } = {}) {
     if (!force && state.sinceCheckpoint < config.checkpointEvery) return;
     state.sinceCheckpoint = 0;
     vault.setState('cursor', state.cursor);
+  }
+
+  // Rate-limit pause: when the 5h or weekly window is exhausted, every slot waits
+  // until the server-provided reset time, then resumes — never hammering with 429s.
+  function requestPause(resetAtMs, scope) {
+    if (!resetAtMs || resetAtMs <= Date.now()) return;
+    if (resetAtMs > state.pauseUntilMs) {
+      state.pauseUntilMs = resetAtMs;
+      state.pauseScope = scope;
+      state.pauseAnnounced = false; // re-announce for the new (later) window
+    }
+  }
+
+  async function waitOutPause() {
+    if (!state.pauseUntilMs || Date.now() >= state.pauseUntilMs) return;
+    if (!state.pauseAnnounced) {
+      state.pauseAnnounced = true;
+      state.rateLimitHits += 1;
+      const mins = Math.ceil((state.pauseUntilMs - Date.now()) / 60000);
+      log(`! ${scopeLabel(state.pauseScope)} 도달 — ${new Date(state.pauseUntilMs).toLocaleString()}에 자동 재개 (${mins}분 대기)`);
+      checkpoint(true); // persist cursor before a long wait
+    }
+    // Poll the wall clock (not one long timeout) so a machine sleep/wake still
+    // resumes on time. Stop signals break out immediately.
+    while (state.running && Date.now() < state.pauseUntilMs) {
+      await sleep(Math.min(30_000, state.pauseUntilMs - Date.now()));
+    }
+    if (state.running && state.pauseUntilMs && Date.now() >= state.pauseUntilMs) {
+      log(`✓ ${scopeLabel(state.pauseScope)} 리셋 — 생성 재개`);
+      state.pauseUntilMs = 0;
+      state.pauseScope = null;
+      state.pauseAnnounced = false;
+    }
   }
 
   // Aborts in-flight requests so a stop is near-instant rather than waiting out
@@ -140,12 +188,18 @@ export async function runWorker(config, { log = console.log } = {}) {
     const { size, bucket: bucketPre } = resolveSize(config.size, spec, gi);
 
     for (let emphasis = 0; emphasis <= config.textRetries && state.running; emphasis += 1) {
-      const prompt = buildPrompt(spec.basePrompt, emphasis);
+      // Text-bearing design categories keep their UI text; everything else is text-free.
+      const prompt = spec.allowText ? buildDesignPrompt(spec.basePrompt) : buildPrompt(spec.basePrompt, emphasis);
+      const instructions = spec.allowText ? DESIGN_INSTRUCTIONS : NO_TEXT_INSTRUCTIONS;
       let result;
       try {
-        result = await provider.generateImage({ prompt, instructions: NO_TEXT_INSTRUCTIONS, size, signal: abort.signal });
+        result = await provider.generateImage({ prompt, instructions, size, signal: abort.signal });
       } catch (error) {
         if (error.code === 'ABORTED') return; // stopping — quiet, not an error
+        if (error.code === 'RATE_LIMITED') {
+          requestPause(error.resetAtMs, error.scope); // pause all slots until reset; not a failure
+          return;
+        }
         state.errors += 1;
         if (error.code === 'UNAUTHORIZED') {
           log(`! UNAUTHORIZED — stopping. Re-login with the Codex CLI.`);
@@ -154,6 +208,12 @@ export async function runWorker(config, { log = console.log } = {}) {
           log(`! gen failed [${spec.category}] ${error.code || ''} ${error.message}`.slice(0, 160));
         }
         return;
+      }
+
+      // Pre-empt the next 429: if this success reports an exhausted window, pause now.
+      if (result.rateLimits) {
+        const pre = pickPause(result.rateLimits, { nowMs: Date.now() });
+        if (pre) requestPause(pre.resetAtMs, pre.scope);
       }
 
       let decoded;
@@ -178,7 +238,7 @@ export async function runWorker(config, { log = console.log } = {}) {
       const bucket = bucketPre || (width && height ? `${width}x${height}` : 'unsized');
 
       let ocr = { hasText: false, charCount: 0, text: '', ran: false };
-      if (ocrOn) {
+      if (ocrOn && !spec.allowText) { // design categories are meant to contain text — skip OCR
         const tmpFile = path.join(tmpDir, `${decoded.sha256.slice(0, 16)}.png`);
         await writeImage(decoded.bytes, tmpFile);
         ocr = await detectText(tmpFile, {
@@ -215,7 +275,7 @@ export async function runWorker(config, { log = console.log } = {}) {
         }
       }
 
-      vault.insertImage({
+      const newId = vault.insertImage({
         combo_key: spec.comboKey,
         global_index: spec.globalIndex,
         category: spec.category,
@@ -250,6 +310,20 @@ export async function runWorker(config, { log = console.log } = {}) {
         created_at: new Date().toISOString()
       });
 
+      // multilingual search index (active images only)
+      if (newId && status === 'active') {
+        try {
+          vault.indexSearch(
+            newId,
+            buildHaystack(
+              { subject: spec.subject, style: spec.style, mood: spec.mood, variant: spec.variant,
+                category: spec.category, tags: buildTags(spec), prompt },
+              SUBJECT_TR
+            )
+          );
+        } catch {}
+      }
+
       state.sinceCheckpoint += 1;
       state.stored += 1;
       if (status === 'quarantined') {
@@ -267,6 +341,8 @@ export async function runWorker(config, { log = console.log } = {}) {
   // One pool slot: keep grabbing indices until stopped / limit reached.
   async function slot() {
     while (state.running) {
+      await waitOutPause(); // hold here while a 5h/weekly window is exhausted
+      if (!state.running) break;
       // bound on images written to disk (clean + quarantined) so the run always
       // terminates, even if many images are quarantined.
       if (config.limit && state.stored >= config.limit) {
@@ -317,7 +393,7 @@ export async function runWorker(config, { log = console.log } = {}) {
     vault.close();
     const secs = (Date.now() - state.startMs) / 1000;
     log(`\n--- summary ---`);
-    log(`produced: ${state.produced} · text-quarantined: ${state.quarantined} · dupes: ${state.duplicates} · errors: ${state.errors}`);
+    log(`produced: ${state.produced} · text-quarantined: ${state.quarantined} · dupes: ${state.duplicates} · errors: ${state.errors} · rate-limit-pauses: ${state.rateLimitHits}`);
     log(`time: ${secs.toFixed(0)}s · rate: ${(state.produced / Math.max(1, secs)).toFixed(2)}/s · cursor: ${state.cursor}`);
     log(`vault total active: ${s.total} · quarantined: ${s.quarantined} · ${(s.bytes / 1e6).toFixed(1)} MB`);
     const diskEnd = diskLimitStatus(config);

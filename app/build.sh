@@ -6,13 +6,19 @@ APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$APP_DIR/.." && pwd)"
 NODE_BIN="$(command -v node || echo /opt/homebrew/bin/node)"
 SQLITE_BIN="$(command -v sqlite3 || echo /usr/bin/sqlite3)"
-VAULT_ROOT="${OMNIGEN_VAULT_ROOT:-/Volumes/ezBackup/omnigen-vault}"
+VAULT_ROOT="${OMNIGEN_VAULT_ROOT:-$HOME/.omnigen-vault}"
 DB_PATH="$VAULT_ROOT/index.sqlite"
 
 BUNDLE="$APP_DIR/OmnigenVault.app"
 MACOS="$BUNDLE/Contents/MacOS"
 RES="$BUNDLE/Contents/Resources"
 mkdir -p "$MACOS" "$RES"
+
+# Auto-incrementing build number: every build bumps the version (visible in Settings).
+BUILD_FILE="$APP_DIR/build-number"
+BUILD_NUM=$(( $(cat "$BUILD_FILE" 2>/dev/null || echo 0) + 1 ))
+echo "$BUILD_NUM" > "$BUILD_FILE"
+SHORT_VERSION="0.1.$BUILD_NUM"
 
 # Build the app icon from the 1024 master (regenerate ALL sizes every build so
 # the iconset can never be left half-updated). Falls back to make-icon.mjs.
@@ -58,6 +64,7 @@ cat > "$BUNDLE/Contents/Info.plist" <<'EOF'
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
+  <!-- version values are overwritten below by PlistBuddy with the auto-bumped build number -->
   <key>LSUIElement</key><true/>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -66,6 +73,10 @@ cat > "$BUNDLE/Contents/Info.plist" <<'EOF'
 </dict>
 </plist>
 EOF
+
+# Stamp the auto-bumped version (before signing, so the signature covers it).
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SHORT_VERSION" "$BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUM" "$BUNDLE/Contents/Info.plist"
 
 # Code-sign with the first available identity (falls back to ad-hoc).
 SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | awk 'NR==1{print $2}')"
@@ -76,6 +87,7 @@ else
 fi
 
 echo "built: $BUNDLE"
+echo "  version: $SHORT_VERSION (build $BUILD_NUM)"
 echo "  project: $PROJECT_DIR"
 echo "  node:    $NODE_BIN"
 echo "  vault:   $VAULT_ROOT"

@@ -3,8 +3,10 @@
 import { loadCodexSession, validateCodexSession } from '../auth/codexSession.js';
 import { buildResponsesRequest } from './buildRequest.js';
 import { extractImageFromStream } from './sse.js';
+import { parseRateLimits, pickPause } from './rateLimit.js';
 
-const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+// 429 is handled separately (pause until the server-provided reset, never blind-retried).
+const RETRYABLE_STATUS = new Set([408, 425, 500, 502, 503, 504]);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,12 +65,27 @@ export function createCodexProvider(config) {
         });
 
         if (!response.ok) {
-          const bodyText = await response.text().catch(() => '');
           if (response.status === 401) {
             const e = new Error('Unauthorized (401). Local ChatGPT auth may be expired — re-login with the Codex CLI.');
             e.code = 'UNAUTHORIZED';
             throw e; // not retryable
           }
+          if (response.status === 429) {
+            // Usage window exhausted (5-hour or weekly). Surface WHEN it resets so the
+            // worker can pause until then and auto-resume — never blind-retry.
+            const ra = Number(response.headers.get?.('retry-after'));
+            const pause = pickPause(parseRateLimits(response.headers), {
+              retryAfterSec: Number.isFinite(ra) ? ra : null,
+              nowMs: Date.now(),
+              force429: true
+            });
+            const e = new Error('Rate limited (429).');
+            e.code = 'RATE_LIMITED';
+            e.resetAtMs = pause.resetAtMs;
+            e.scope = pause.scope;
+            throw e;
+          }
+          const bodyText = await response.text().catch(() => '');
           if (RETRYABLE_STATUS.has(response.status) && attempt <= config.maxRetries) {
             const wait = backoffMs(attempt, response);
             lastError = new Error(`HTTP ${response.status} from backend; retrying in ${wait}ms.`);
@@ -100,7 +117,8 @@ export function createCodexProvider(config) {
           revisedPrompt: generation.revisedPrompt,
           responseId: generation.responseId,
           sessionId: request.sessionId,
-          status: response.status
+          status: response.status,
+          rateLimits: parseRateLimits(response.headers) // lets the worker pause before the next 429
         };
       } catch (error) {
         // Caller asked to stop → bail immediately, do not retry.
@@ -109,7 +127,12 @@ export function createCodexProvider(config) {
           e.code = 'ABORTED';
           throw e;
         }
-        if (error?.code === 'UNAUTHORIZED' || error?.code === 'HTTP_ERROR' || error?.code === 'AUTH_INCOMPLETE') {
+        if (
+          error?.code === 'UNAUTHORIZED' ||
+          error?.code === 'HTTP_ERROR' ||
+          error?.code === 'AUTH_INCOMPLETE' ||
+          error?.code === 'RATE_LIMITED'
+        ) {
           throw error;
         }
         // Network/timeout/parse errors: retry with backoff.

@@ -5,8 +5,9 @@
 // optional "variant" modifier used to keep the space effectively infinite.
 //
 // Category names double as the top-level folder names on disk (kebab-case).
-// Text-centric design types (web/poster/logo/UI) are intentionally excluded —
-// the vault is purely visual, text-free imagery.
+// The vault is purely visual, text-free imagery. Text-BEARING design (UI mockups,
+// logos, typographic posters) is excluded; format-sized but text-free backgrounds
+// (web/mobile/poster/tablet wallpapers) are included as abstract/scenic art.
 import { STYLES } from './styles.js';
 
 export const DIMENSIONS = {
@@ -293,6 +294,49 @@ export const CATEGORIES = [
     'a smooth color gradient backdrop', 'soft abstract bokeh lights', 'a minimalist gradient mesh', 'flowing silk-like waves',
     'a dreamy cloud gradient', 'an aurora-inspired color wash', 'a dark moody gradient with glow', 'pastel blurred shapes',
     'a vibrant liquid swirl', 'a starfield gradient', 'geometric low-poly background', 'a calm ocean gradient' ] },
+  // Text-free background/wallpaper sets sized for specific formats (no UI, no type).
+  { name: 'web-desktop-wallpapers', orientation: 'landscape', subjects: [ // 16:9
+    'a wide minimalist gradient hero backdrop', 'a soft abstract mesh gradient in cool tones', 'a sweeping aurora light wash',
+    'a wide blurred bokeh light field', 'a calm panoramic ocean gradient', 'a low-poly mountain silhouette backdrop',
+    'flowing silk waves in deep blue', 'a dark moody gradient with a subtle glow', 'a frosted glass abstract texture',
+    'a sunrise color wash over soft haze', 'fluid marbled ink in pastel tones', 'a nebula starfield gradient' ] },
+  { name: 'mobile-wallpapers', orientation: 'portrait', subjects: [ // 9:16
+    'a vertical gradient blur in twilight colors', 'a tall abstract liquid swirl', 'a vertical aurora ribbon of light',
+    'soft vertical bokeh lights', 'a minimalist vertical gradient mesh', 'flowing vertical silk waves',
+    'a dreamy vertical cloud gradient', 'a dark vertical gradient with a neon glow', 'pastel vertical blurred shapes',
+    'a vertical starfield over distant mountains', 'a frosted vertical glass abstraction', 'a vertical sunset color wash' ] },
+  { name: 'poster-art', orientation: 'poster', subjects: [ // 2:3, text-free abstract art
+    'a bold minimalist abstract shape composition', 'a Bauhaus-inspired geometric arrangement', 'a Swiss-style abstract color-block layout',
+    'a single dramatic gradient orb on a flat ground', 'a Risograph-textured abstract form', 'an op-art concentric pattern',
+    'a midcentury abstract collage of shapes', 'a large duotone organic form', 'a flat-color sun and mountain motif',
+    'a vibrant gradient arch composition', 'a minimalist line-art abstract form', 'a layered paper-cut abstract scene' ] },
+  { name: 'tablet-square-backgrounds', orientation: 'square', subjects: [ // 1:1
+    'a centered radial gradient backdrop', 'a square abstract mesh gradient', 'a soft square bokeh light field',
+    'a symmetric mandala-like gradient', 'a square low-poly color field', 'concentric circle gradient rings',
+    'a square liquid marble swirl', 'a calm square gradient wash', 'a square geometric pattern tile',
+    'a dreamy square cloud gradient', 'a square starfield gradient', 'pastel square blurred shapes' ] },
+  // Text-BEARING UI/web design mockups (allowText): real interface text, OCR skipped.
+  { name: 'web-design', orientation: 'landscape', allowText: true, subjects: [ // 16:9
+    'a SaaS landing page hero section', 'a modern analytics dashboard screen', 'an e-commerce product listing page',
+    'a pricing page with three plan cards', 'a creative portfolio homepage', 'a blog article reading page',
+    'a sign-up and login web form', 'a project management board UI', 'a fintech banking web dashboard',
+    'a travel booking website hero', 'a music streaming web player', 'a settings page with tabs and toggles',
+    'a marketing agency landing page', 'an admin CRM contacts table', 'a food delivery website menu page',
+    'a real-estate listings grid page', 'a startup product feature section', 'a documentation help center page' ] },
+  { name: 'mobile-design', orientation: 'portrait', allowText: true, subjects: [ // 9:16
+    'a mobile banking app home screen', 'a fitness tracker app dashboard', 'a food delivery app checkout screen',
+    'a mobile music player screen', 'a chat messaging conversation screen', 'a social media feed screen',
+    'an onboarding walkthrough screen', 'a mobile e-commerce product page', 'a calendar and schedule app screen',
+    'a weather app daily forecast screen', 'a ride-hailing app map screen', 'a login and sign-up mobile screen',
+    'a profile and settings mobile screen', 'a travel itinerary mobile app', 'a habit tracker app screen',
+    'a podcast player mobile screen', 'a mobile wallet and cards screen', 'a news reader mobile feed' ] },
+  { name: 'app-design', orientation: 'landscape', allowText: true, subjects: [ // desktop/web application UI, 16:9
+    'a desktop productivity app dashboard', 'a project management kanban app', 'a code editor IDE interface',
+    'a design tool canvas workspace', 'a music production DAW interface', 'a video editing timeline app',
+    'a CRM sales pipeline app', 'a team chat workspace app', 'an analytics BI dashboard app',
+    'a calendar and email client app', 'a note-taking app interface', 'a spreadsheet app interface',
+    'a finance budgeting app dashboard', 'a smart-home control panel app', 'a customer support helpdesk app',
+    'a cloud storage file manager app', 'a habit and goal tracker app', 'an e-learning course platform app' ] },
   { name: 'materials-surfaces', orientation: 'square', subjects: [
     'molten glass swirls', 'polished marble slab', 'brushed aluminium surface', 'rough concrete wall',
     'soft velvet fabric folds', 'liquid mercury droplets', 'amber resin with inclusions', 'crumpled gold foil',
@@ -347,9 +391,24 @@ export const CATEGORIES = [
 
 export const CATEGORY_NAMES = CATEGORIES.map((c) => c.name);
 
+// Dimensions for text-BEARING UI/web design categories (allowText). Crossed with
+// the subject instead of the artistic style/lighting/palette dimensions, which make
+// no sense for interface mockups.
+export const DESIGN_DIMENSIONS = {
+  aesthetic: [
+    'flat design', 'material design', 'neumorphic UI', 'glassmorphism', 'minimal clean UI',
+    'bold modern UI', 'skeuomorphic detail', 'brutalist web design', 'soft rounded cards', 'gradient-rich UI',
+    'monochrome editorial', 'corporate clean', 'playful colorful UI', 'iOS native style', 'Material You',
+    'Swiss grid layout', 'data-dense dashboard', 'big-type hero layout', 'card-based layout', 'sleek dark UI'
+  ],
+  theme: ['light theme', 'dark theme', 'high-contrast theme', 'pastel theme', 'vibrant theme', 'muted neutral theme'],
+  accent: ['blue accent', 'indigo accent', 'green accent', 'orange accent', 'teal accent', 'pink accent', 'monochrome accent']
+};
+
 // Orientation -> default Codex image size.
 export const ORIENTATION_SIZE = {
   square: '2048x2048',
-  landscape: '3840x2160',
-  portrait: '2160x3840'
+  landscape: '3840x2160', // 16:9 (web / desktop)
+  portrait: '2160x3840', // 9:16 (mobile)
+  poster: '1024x1536' // 2:3 (poster art)
 };

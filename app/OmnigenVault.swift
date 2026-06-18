@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   // MARK: state
   private var statusItem: NSStatusItem!
   private var worker: Process?
+  private var workerLog = "" // bounded capture of generate output to surface auth/disk failures
   private var activeCount = -1
   private var theme: String?
   private var lastMilestone = -1
@@ -26,8 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private var ocr = true
   private var maxDisk = 90
   private var autoStartGeneration = false
+  private var showCountInTray = true
+  private var publicHostname = "" // Cloudflare custom domain for the gallery (named tunnel)
+  private let namedTunnelName = "omnigen"
 
-  private let concurrencyChoices = [4, 8, 16, 24]
+  private let concurrencyChoices = [4, 8, 16, 24, 32, 48, 64]
   private let diskChoices = [80, 85, 90, 95]
   private let sizeChoices: [(label: String, value: String)] = [
     ("카테고리 자동", "auto-category"), ("정사각 1024", "square"), ("가로 3:2", "landscape"),
@@ -57,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private var diskPop: NSPopUpButton?
   private var loginCheck: NSButton?
   private var autoStartCheck: NSButton?
+  private var showCountCheck: NSButton?
+  private var hostField: NSTextField?
 
   // derived paths
   private var dbPath: String { vaultRoot + "/index.sqlite" }
@@ -65,7 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   // MARK: lifecycle
   func applicationDidFinishLaunching(_ notification: Notification) {
     UserDefaults.standard.register(defaults: [
-      "concurrency": 16, "size": "auto-category", "ocr": true, "maxDisk": 90, "autoStartGen": false
+      "concurrency": 16, "size": "auto-category", "ocr": true, "maxDisk": 90, "autoStartGen": false,
+      "showCount": true, "publicHostname": ""
     ])
     loadSettings()
     vaultRoot = resolveVaultRoot()
@@ -90,6 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     ocr = d.bool(forKey: "ocr")
     maxDisk = d.integer(forKey: "maxDisk"); if maxDisk == 0 { maxDisk = 90 }
     autoStartGeneration = d.bool(forKey: "autoStartGen")
+    showCountInTray = d.bool(forKey: "showCount")
+    publicHostname = d.string(forKey: "publicHostname") ?? ""
   }
 
   private func saveSettings() {
@@ -99,6 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     d.set(ocr, forKey: "ocr")
     d.set(maxDisk, forKey: "maxDisk")
     d.set(autoStartGeneration, forKey: "autoStartGen")
+    d.set(showCountInTray, forKey: "showCount")
+    d.set(publicHostname, forKey: "publicHostname")
   }
 
   private func resolveVaultRoot() -> String {
@@ -237,11 +248,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     if let t = theme { args += ["--theme", t] }
     if !ocr { args.append("--no-ocr") }
     let proc = nodeProcess(args)
+    // Capture output (the generator exits 0 even when every request is 401, printing
+    // "UNAUTHORIZED" to stdout); without this the app would silently flip back to stopped.
+    let outPipe = Pipe()
+    proc.standardOutput = outPipe
+    proc.standardError = outPipe
+    workerLog = ""
+    outPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+      let data = h.availableData
+      guard !data.isEmpty, let s = String(data: data, encoding: .utf8) else { return }
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        if self.workerLog.utf8.count < 64_000 { self.workerLog += s }
+      }
+    }
     proc.terminationHandler = { [weak self] _ in
       DispatchQueue.main.async {
         guard let self = self else { return }
         self.worker = nil
-        if self.diskUsedPercent() ?? 0 >= Double(self.maxDisk) {
+        outPipe.fileHandleForReading.readabilityHandler = nil
+        if self.workerLog.contains("UNAUTHORIZED") {
+          self.notify("Codex 인증 만료 — 생성을 시작하지 못했습니다. 터미널에서 'codex login' 후 다시 시작하세요.")
+        } else if self.diskUsedPercent() ?? 0 >= Double(self.maxDisk) {
           self.notify("디스크 사용 상한(\(self.maxDisk)%) 도달로 생성을 멈췄습니다.")
         }
         self.updateUI()
@@ -301,39 +329,100 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private func startServer() {
     guard serverProc == nil else { return }
     guard vaultReachable() else { notify("저장 디스크를 찾을 수 없습니다."); return }
-    // 1) hardened read-only public server
-    let s = nodeProcess(["serve", "--public", "--port", String(servePort), "--vault", vaultRoot])
+    // 1) hardened public server (read-only except in-browser star rating write-back)
+    let s = nodeProcess(["serve", "--public", "--allow-rating", "--port", String(servePort), "--vault", vaultRoot])
     s.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.serverProc = nil; self?.stopServer(); self?.updateUI() } }
     do { try s.run(); serverProc = s } catch { notify("웹 서버 시작 실패: \(error.localizedDescription)"); return }
 
-    // 2) Cloudflare quick tunnel for external access (parse the public URL)
+    // 2) Cloudflare tunnel for external access. A configured custom domain uses a
+    //    named tunnel (stable hostname, immune to the Mac's public IP changing);
+    //    otherwise a quick tunnel with an ephemeral trycloudflare.com URL.
     if let cf = findExecutable("cloudflared") {
-      let t = Process()
-      t.executableURL = URL(fileURLWithPath: cf)
-      t.arguments = ["tunnel", "--url", "http://localhost:\(servePort)"]
-      let pipe = Pipe()
-      t.standardOutput = pipe
-      t.standardError = pipe
-      pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
-        let s = String(data: h.availableData, encoding: .utf8) ?? ""
-        if let r = s.range(of: "https://[a-z0-9-]+\\.trycloudflare\\.com", options: .regularExpression) {
-          let url = String(s[r])
-          DispatchQueue.main.async {
-            if self?.publicURL != url {
-              self?.publicURL = url
-              self?.notify("외부 공개 URL (브라우저로 엽니다): \(url)")
-              if let u = URL(string: url) { NSWorkspace.shared.open(u) } // auto-open the gallery
-              self?.updateUI()
-            }
-          }
-        }
+      let host = publicHostname.trimmingCharacters(in: .whitespacesAndNewlines)
+      if host.isEmpty {
+        runQuickTunnel(cf)
+      } else if cloudflaredLoggedIn() {
+        runNamedTunnel(cf, host: host)
+      } else {
+        notify("Cloudflare 로그인이 필요합니다 — 터미널에서 'cloudflared tunnel login' 후 다시 시작하세요. 임시 URL로 공개합니다.")
+        runQuickTunnel(cf)
       }
-      t.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.tunnelProc = nil; self?.publicURL = nil; self?.updateUI() } }
-      do { try t.run(); tunnelProc = t } catch { notify("cloudflared 실행 실패") }
     } else {
       notify("cloudflared가 없어 로컬만 공개됩니다. 'brew install cloudflared' 후 다시 시작하세요. (http://localhost:\(servePort))")
     }
     updateUI()
+  }
+
+  private func cloudflaredLoggedIn() -> Bool {
+    FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.cloudflared/cert.pem")
+  }
+
+  // Quick tunnel: ephemeral random trycloudflare.com hostname, parsed from stdout.
+  private func runQuickTunnel(_ cf: String) {
+    let t = Process()
+    t.executableURL = URL(fileURLWithPath: cf)
+    t.arguments = ["tunnel", "--url", "http://localhost:\(servePort)"]
+    let pipe = Pipe()
+    t.standardOutput = pipe
+    t.standardError = pipe
+    pipe.fileHandleForReading.readabilityHandler = { [weak self] h in
+      let s = String(data: h.availableData, encoding: .utf8) ?? ""
+      if let r = s.range(of: "https://[a-z0-9-]+\\.trycloudflare\\.com", options: .regularExpression) {
+        let url = String(s[r])
+        DispatchQueue.main.async {
+          if self?.publicURL != url {
+            self?.publicURL = url
+            self?.updateUI()
+            self?.openWhenReady(url) // open the browser only once the tunnel actually serves
+          }
+        }
+      }
+    }
+    t.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.tunnelProc = nil; self?.publicURL = nil; self?.updateUI() } }
+    do { try t.run(); tunnelProc = t } catch { notify("cloudflared 실행 실패") }
+  }
+
+  // Named tunnel: routes the configured custom domain to localhost. The hostname is
+  // fixed by DNS, so it stays valid even when the Mac's public IP changes.
+  private func runNamedTunnel(_ cf: String, host: String) {
+    let t = Process()
+    t.executableURL = URL(fileURLWithPath: cf)
+    t.arguments = ["tunnel", "run", "--url", "http://localhost:\(servePort)", namedTunnelName]
+    t.standardOutput = FileHandle.nullDevice
+    t.standardError = FileHandle.nullDevice
+    t.terminationHandler = { [weak self] _ in DispatchQueue.main.async { self?.tunnelProc = nil; self?.publicURL = nil; self?.updateUI() } }
+    do {
+      try t.run(); tunnelProc = t
+      let url = "https://\(host)"
+      publicURL = url
+      updateUI()
+      openWhenReady(url) // poll the domain until tunnel + DNS are live, then open
+    } catch { notify("cloudflared 실행 실패") }
+  }
+
+  // The trycloudflare hostname is printed before the edge can route to the origin;
+  // opening it immediately lands on a Cloudflare error page. Poll the URL and open the
+  // browser only once it returns a real response. Give up and open anyway after ~60s.
+  private func openWhenReady(_ urlString: String, attempt: Int = 0) {
+    guard let url = URL(string: urlString) else { return }
+    // Bail if the tunnel was stopped or replaced while we were waiting.
+    guard publicURL == urlString, tunnelProc != nil else { return }
+    if attempt >= 40 { NSWorkspace.shared.open(url); return }
+    var req = URLRequest(url: url)
+    req.timeoutInterval = 6
+    req.cachePolicy = .reloadIgnoringLocalCacheData
+    URLSession.shared.dataTask(with: req) { [weak self] _, resp, err in
+      DispatchQueue.main.async {
+        guard let self = self, self.publicURL == urlString, self.tunnelProc != nil else { return }
+        if err == nil, let http = resp as? HTTPURLResponse, (200..<400).contains(http.statusCode) {
+          NSWorkspace.shared.open(url) // tunnel is live — open the gallery once
+        } else {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            self.openWhenReady(urlString, attempt: attempt + 1)
+          }
+        }
+      }
+    }.resume()
   }
 
   private func stopServer() {
@@ -367,6 +456,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
   }
 
+  private func appVersionString() -> String {
+    let info = Bundle.main.infoDictionary
+    let short = (info?["CFBundleShortVersionString"] as? String) ?? "?"
+    let build = (info?["CFBundleVersion"] as? String) ?? "?"
+    return "\(short) (build \(build))"
+  }
+
   private func row(_ label: String, _ control: NSView) -> NSStackView {
     let l = NSTextField(labelWithString: label)
     l.alignment = .right
@@ -380,7 +476,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   }
 
   private func makeSettingsWindow() -> NSWindowController {
-    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 320),
+    let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 432),
                        styleMask: [.titled, .closable, .miniaturizable],
                        backing: .buffered, defer: false)
     win.title = "Omnigen 설정"
@@ -415,6 +511,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     let aCheck = NSButton(checkboxWithTitle: "앱 시작 시 생성 자동 시작", target: self, action: #selector(toggleAutoStart(_:)))
     self.autoStartCheck = aCheck
 
+    let scCheck = NSButton(checkboxWithTitle: "트레이에 이미지 장수 표시", target: self, action: #selector(changeShowCount(_:)))
+    self.showCountCheck = scCheck
+
+    let hField = NSTextField(string: publicHostname)
+    hField.placeholderString = "gallery.example.com"
+    hField.target = self; hField.action = #selector(changePublicHostname(_:))
+    hField.translatesAutoresizingMaskIntoConstraints = false
+    hField.widthAnchor.constraint(equalToConstant: 220).isActive = true
+    self.hostField = hField
+
+    let verLabel = NSTextField(labelWithString: appVersionString())
+    verLabel.textColor = .secondaryLabelColor
+
     let stack = NSStackView(views: [
       row("저장 위치", vaultStack),
       row("동시 생성 수", cPop),
@@ -422,7 +531,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
       row("", oCheck),
       row("디스크 사용 상한", dPop),
       row("", lCheck),
-      row("", aCheck)
+      row("", aCheck),
+      row("", scCheck),
+      row("공개 도메인", hField),
+      row("버전", verLabel)
     ])
     stack.orientation = .vertical
     stack.alignment = .leading
@@ -448,6 +560,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     diskPop?.selectItem(at: diskChoices.firstIndex(of: maxDisk) ?? 2)
     autoStartCheck?.state = autoStartGeneration ? .on : .off
     loginCheck?.state = loginEnabled() ? .on : .off
+    showCountCheck?.state = showCountInTray ? .on : .off
+    hostField?.stringValue = publicHostname
   }
 
   @objc private func changeConcurrency(_ s: NSPopUpButton) { concurrency = concurrencyChoices[s.indexOfSelectedItem]; saveSettings() }
@@ -455,6 +569,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   @objc private func changeOCR(_ b: NSButton) { ocr = (b.state == .on); saveSettings() }
   @objc private func changeDisk(_ s: NSPopUpButton) { maxDisk = diskChoices[s.indexOfSelectedItem]; saveSettings(); updateUI() }
   @objc private func toggleAutoStart(_ b: NSButton) { autoStartGeneration = (b.state == .on); saveSettings() }
+  @objc private func changeShowCount(_ b: NSButton) { showCountInTray = (b.state == .on); saveSettings(); updateUI() }
+  @objc private func changePublicHostname(_ f: NSTextField) { publicHostname = f.stringValue.trimmingCharacters(in: .whitespacesAndNewlines); saveSettings() }
 
   @objc private func chooseVault() {
     let panel = NSOpenPanel()
@@ -592,7 +708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
       let img = NSImage(systemSymbolName: glyph, accessibilityDescription: "Omnigen")?.withSymbolConfiguration(cfg)
       img?.isTemplate = true
       button.image = img
-      button.title = running ? " \(countStr)" : ""
+      button.title = (showCountInTray && activeCount >= 0) ? " \(countStr)" : ""
       button.imagePosition = .imageLeft
     }
     var diskTag = ""
@@ -627,6 +743,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   func applicationWillTerminate(_ notification: Notification) { stopServerSync(); stopGenerationSync() }
 
   func windowWillClose(_ notification: Notification) {
+    // Commit any text field still being edited (NSTextField only fires its action on
+    // Return/Tab) so typing a value and closing the window persists it.
+    (notification.object as? NSWindow)?.makeFirstResponder(nil)
+    if let h = hostField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), h != publicHostname {
+      publicHostname = h
+      saveSettings()
+    }
     // back to menu-bar-only once Settings closes
     DispatchQueue.main.async { NSApp.setActivationPolicy(.accessory) }
   }
