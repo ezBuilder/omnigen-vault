@@ -17,24 +17,41 @@
  * @typedef {{ usedPercent: number|null, resetAtMs: number|null, windowMinutes: number|null }} Window
  */
 export function parseRateLimits(headers) {
-  const get = (re) => {
-    if (!headers) return null;
+  const map = {};
+  if (headers) {
     const entries =
       typeof headers.entries === 'function' ? headers.entries() : Object.entries(headers);
-    for (const [k, v] of entries) if (re.test(k)) return v;
-    return null;
-  };
+    for (const [k, v] of entries) map[String(k).toLowerCase()] = v;
+  }
   const num = (v) => {
+    if (v == null || v === '') return null; // missing header → unknown, NOT 0
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   };
+  // The backend reports each window TWICE: an account-wide set (x-codex-<kind>-*)
+  // and a per-model set (x-codex-<codename>-<kind>-*, e.g. "bengalfox"). They can
+  // differ a lot, so take the MORE-used of the two — that's the binding limit, the
+  // one that actually triggers a 429 — for both the meter and the pre-emptive pause.
   const win = (kind) => {
-    const resetAtSec = num(get(new RegExp(`^x-codex-.*-${kind}-reset-at$`, 'i')));
-    return {
-      usedPercent: num(get(new RegExp(`^x-codex-.*-${kind}-used-percent$`, 'i'))),
-      resetAtMs: resetAtSec != null ? resetAtSec * 1000 : null,
-      windowMinutes: num(get(new RegExp(`^x-codex-.*-${kind}-window-minutes$`, 'i')))
-    };
+    const prefixes = new Set();
+    for (const k of Object.keys(map)) {
+      const m = k.match(new RegExp(`^(x-codex-(?:.+-)?)${kind}-used-percent$`));
+      if (m) prefixes.add(m[1]);
+    }
+    let best = { usedPercent: null, resetAtMs: null, windowMinutes: null };
+    for (const p of prefixes) {
+      const up = num(map[`${p}${kind}-used-percent`]);
+      if (up == null) continue;
+      if (best.usedPercent == null || up > best.usedPercent) {
+        const ra = num(map[`${p}${kind}-reset-at`]);
+        best = {
+          usedPercent: up,
+          resetAtMs: ra != null ? ra * 1000 : null,
+          windowMinutes: num(map[`${p}${kind}-window-minutes`])
+        };
+      }
+    }
+    return best;
   };
   return { primary: win('primary'), secondary: win('secondary') };
 }

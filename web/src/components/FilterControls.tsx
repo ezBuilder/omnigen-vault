@@ -37,6 +37,7 @@ export function FilterControls({
           value={filters.category}
           onChange={(v) => setFilter('category', v)}
           categories={facets?.categories ?? []}
+          inline={stack}
         />
       )}
       {field(

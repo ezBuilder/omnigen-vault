@@ -744,6 +744,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private func scopeKo(_ s: String) -> String {
     s == "weekly" ? "주간 한도" : s == "5h" ? "5시간 한도" : "요청 한도"
   }
+  // Show REMAINING quota (the standard), derived from the backend's used-percent.
+  private func remPct(_ used: Double) -> String {
+    used >= 0 ? "\(max(0, 100 - Int(used.rounded())))%" : "—"
+  }
 
   private func updateUI() {
     let running = (worker?.isRunning ?? false)
@@ -782,11 +786,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     if usage5h >= 0 || usageWeek >= 0 {
       usageRow?.isHidden = false
       if pausedNow {
-        usageRow?.title = "⏸ \(scopeKo(pauseScope)) 도달 · \(clockHM(pauseUntilMs)) 리셋"
+        usageRow?.title = "⏸ \(scopeKo(pauseScope)) 소진 · \(clockHM(pauseUntilMs)) 리셋"
       } else {
-        let a = usage5h >= 0 ? "5시간 \(Int(usage5h.rounded()))%" : "5시간 —"
-        let b = usageWeek >= 0 ? "주간 \(Int(usageWeek.rounded()))%" : "주간 —"
-        usageRow?.title = "사용량 · \(a) · \(b)"
+        usageRow?.title = "남은 쿼터 · 5시간 \(remPct(usage5h)) · 주간 \(remPct(usageWeek))"
       }
     } else {
       usageRow?.isHidden = true

@@ -17,15 +17,65 @@ import type { Facet } from '@/lib/types';
 export function CategoryCombobox({
   value,
   onChange,
-  categories
+  categories,
+  inline = false
 }: {
   value: string;
   onChange: (v: string) => void;
   categories: Facet[];
+  /** Render the list inline (no popover) — used inside the mobile filter sheet. */
+  inline?: boolean;
 }) {
   const { t, tc } = useI18n();
   const [open, setOpen] = useState(false);
   const label = value ? tc(value) : t('all');
+
+  const list = (close?: () => void) => (
+    <Command
+      filter={(val, search) => {
+        const hay = (val + ' ' + tc(val)).toLowerCase();
+        return hay.includes(search.toLowerCase()) ? 1 : 0;
+      }}
+    >
+      <CommandInput placeholder={t('searchCategory')} />
+      <CommandList className={inline ? 'max-h-[40dvh]' : undefined}>
+        <CommandEmpty>{t('none')}</CommandEmpty>
+        <CommandGroup>
+          <CommandItem
+            value="all"
+            onSelect={() => {
+              onChange('');
+              close?.();
+            }}
+          >
+            <Check className={cn('mr-2 size-4', value === '' ? 'opacity-100' : 'opacity-0')} />
+            {t('all')}
+          </CommandItem>
+          {categories.map((c) => (
+            <CommandItem
+              key={c.name}
+              value={c.name}
+              onSelect={() => {
+                onChange(c.name);
+                close?.();
+              }}
+            >
+              <Check className={cn('mr-2 size-4', value === c.name ? 'opacity-100' : 'opacity-0')} />
+              <span className="flex-1 truncate">{tc(c.name)}</span>
+              <span className="ml-2 text-xs text-muted-foreground">{c.count.toLocaleString()}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
+
+  // Mobile (inside the filter bottom-sheet): render the list inline. A nested Radix
+  // Popover inside the Sheet can open off-screen, get clipped, or fight the sheet for
+  // focus on phones — an inline list avoids that whole class of problems.
+  if (inline) {
+    return <div className="overflow-hidden rounded-md border">{list()}</div>;
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -41,43 +91,7 @@ export function CategoryCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command
-          filter={(val, search) => {
-            const hay = (val + ' ' + tc(val)).toLowerCase();
-            return hay.includes(search.toLowerCase()) ? 1 : 0;
-          }}
-        >
-          <CommandInput placeholder={t('searchCategory')} />
-          <CommandList>
-            <CommandEmpty>{t('none')}</CommandEmpty>
-            <CommandGroup>
-              <CommandItem
-                value="all"
-                onSelect={() => {
-                  onChange('');
-                  setOpen(false);
-                }}
-              >
-                <Check className={cn('mr-2 size-4', value === '' ? 'opacity-100' : 'opacity-0')} />
-                {t('all')}
-              </CommandItem>
-              {categories.map((c) => (
-                <CommandItem
-                  key={c.name}
-                  value={c.name}
-                  onSelect={() => {
-                    onChange(c.name);
-                    setOpen(false);
-                  }}
-                >
-                  <Check className={cn('mr-2 size-4', value === c.name ? 'opacity-100' : 'opacity-0')} />
-                  <span className="flex-1 truncate">{tc(c.name)}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">{c.count.toLocaleString()}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+        {list(() => setOpen(false))}
       </PopoverContent>
     </Popover>
   );
