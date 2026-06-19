@@ -71,6 +71,7 @@ export async function runWorker(config, { log = console.log } = {}) {
   );
 
   const vault = openVault(config.dbPath);
+  const statusPath = path.join(config.vaultRoot, '.omnigen-status.json');
   const provider = createCodexProvider(config);
   await provider.ensureSession();
   for (const w of provider.warnings) log(`warning: ${w}`);
@@ -117,7 +118,9 @@ export async function runWorker(config, { log = console.log } = {}) {
     pauseUntilMs: 0, // wall-clock epoch to resume at when a usage window is exhausted
     pauseScope: null,
     pauseAnnounced: false,
-    rateLimitHits: 0
+    rateLimitHits: 0,
+    lastRateLimits: null,
+    lastStatusWrite: 0
   };
 
   const grab = () => {
@@ -143,6 +146,31 @@ export async function runWorker(config, { log = console.log } = {}) {
     }
   }
 
+  // Surface usage + pause state to the menu-bar app (and any watcher) via a small
+  // JSON file in the vault. Throttled to ~4s; forced on pause/resume/start/stop.
+  function writeStatus(force = false) {
+    const now = Date.now();
+    if (!force && now - state.lastStatusWrite < 4000) return;
+    state.lastStatusWrite = now;
+    const rl = state.lastRateLimits;
+    const win = (w) => (w ? { usedPercent: w.usedPercent, resetAtMs: w.resetAtMs } : null);
+    try {
+      fs.writeFileSync(
+        statusPath,
+        JSON.stringify({
+          ts: now,
+          running: state.running,
+          paused: state.pauseUntilMs > now,
+          pauseScope: state.pauseScope,
+          pauseUntilMs: state.pauseUntilMs || 0,
+          produced: state.produced,
+          primary: win(rl && rl.primary), // 5-hour window
+          secondary: win(rl && rl.secondary) // weekly window
+        })
+      );
+    } catch { /* status is best-effort */ }
+  }
+
   async function waitOutPause() {
     if (!state.pauseUntilMs || Date.now() >= state.pauseUntilMs) return;
     if (!state.pauseAnnounced) {
@@ -151,6 +179,7 @@ export async function runWorker(config, { log = console.log } = {}) {
       const mins = Math.ceil((state.pauseUntilMs - Date.now()) / 60000);
       log(`! ${scopeLabel(state.pauseScope)} 도달 — ${new Date(state.pauseUntilMs).toLocaleString()}에 자동 재개 (${mins}분 대기)`);
       checkpoint(true); // persist cursor before a long wait
+      writeStatus(true); // tell the app it's paused right away
     }
     // Poll the wall clock (not one long timeout) so a machine sleep/wake still
     // resumes on time. Stop signals break out immediately.
@@ -162,6 +191,7 @@ export async function runWorker(config, { log = console.log } = {}) {
       state.pauseUntilMs = 0;
       state.pauseScope = null;
       state.pauseAnnounced = false;
+      writeStatus(true); // clear the paused state in the app
     }
   }
 
@@ -212,8 +242,10 @@ export async function runWorker(config, { log = console.log } = {}) {
 
       // Pre-empt the next 429: if this success reports an exhausted window, pause now.
       if (result.rateLimits) {
+        state.lastRateLimits = result.rateLimits;
         const pre = pickPause(result.rateLimits, { nowMs: Date.now() });
         if (pre) requestPause(pre.resetAtMs, pre.scope);
+        writeStatus();
       }
 
       let decoded;
@@ -382,6 +414,7 @@ export async function runWorker(config, { log = console.log } = {}) {
     }
   }
 
+  writeStatus(true); // initial heartbeat so the app reflects live state immediately
   try {
     await Promise.all(Array.from({ length: config.concurrency }, () => slot()));
   } finally {
@@ -389,6 +422,8 @@ export async function runWorker(config, { log = console.log } = {}) {
     process.off('SIGTERM', stop);
     await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     checkpoint(true);
+    state.running = false;
+    writeStatus(true); // final state: stopped, not paused
     const s = vault.stats();
     vault.close();
     const secs = (Date.now() - state.startMs) / 1000;

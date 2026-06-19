@@ -19,6 +19,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private var theme: String?
   private var lastMilestone = -1
   private var pollTimer: Timer?
+  // generation usage / rate-limit state (from <vault>/.omnigen-status.json)
+  private var usage5h = -1.0     // 5-hour window used-percent (-1 = unknown)
+  private var usageWeek = -1.0   // weekly window used-percent
+  private var quotaPaused = false
+  private var pauseScope = ""
+  private var pauseUntilMs = 0.0
 
   // settings (persisted)
   private var vaultRoot = Paths.defaultVaultRoot
@@ -51,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private var themeItem: NSMenuItem!
   private var serverItem: NSMenuItem!
   private var urlItem: NSMenuItem!
+  private var usageRow: NSMenuItem!
 
   // settings window + controls
   private var settingsWC: NSWindowController?
@@ -66,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
   // derived paths
   private var dbPath: String { vaultRoot + "/index.sqlite" }
+  private var statusPath: String { vaultRoot + "/.omnigen-status.json" }
   private var galleryPath: String { vaultRoot + "/gallery.html" }
 
   // MARK: lifecycle
@@ -150,6 +158,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     statusRow = NSMenuItem(title: "정지됨", action: nil, keyEquivalent: "")
     statusRow.isEnabled = false
     menu.addItem(statusRow)
+
+    usageRow = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    usageRow.isEnabled = false
+    usageRow.isHidden = true
+    menu.addItem(usageRow)
     menu.addItem(.separator())
 
     toggleItem = NSMenuItem(title: "시작 (전체 종류)", action: #selector(toggleGeneration), keyEquivalent: "s")
@@ -658,11 +671,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
   private func refreshCount() {
     let path = dbPath
+    let spath = statusPath
     DispatchQueue.global(qos: .utility).async { [weak self] in
       let count = AppDelegate.readActiveCount(path)
+      let st = AppDelegate.readStatus(spath)
       DispatchQueue.main.async {
         guard let self = self else { return }
         self.activeCount = count
+        if let st = st {
+          self.usage5h = st.p5h; self.usageWeek = st.week
+          self.quotaPaused = st.paused; self.pauseScope = st.scope; self.pauseUntilMs = st.until
+        }
         self.checkMilestone(count)
         self.updateUI()
       }
@@ -701,6 +720,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     return -1
   }
 
+  private struct GenStatus { let p5h: Double; let week: Double; let paused: Bool; let scope: String; let until: Double }
+  private static func readStatus(_ path: String) -> GenStatus? {
+    guard let data = FileManager.default.contents(atPath: path),
+          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+    func pct(_ key: String) -> Double {
+      guard let w = obj[key] as? [String: Any], let v = w["usedPercent"] as? Double else { return -1 }
+      return v
+    }
+    return GenStatus(
+      p5h: pct("primary"),
+      week: pct("secondary"),
+      paused: (obj["paused"] as? Bool) ?? false,
+      scope: (obj["pauseScope"] as? String) ?? "",
+      until: (obj["pauseUntilMs"] as? Double) ?? 0
+    )
+  }
+
+  private func clockHM(_ ms: Double) -> String {
+    let f = DateFormatter(); f.dateFormat = "HH:mm"
+    return f.string(from: Date(timeIntervalSince1970: ms / 1000))
+  }
+  private func scopeKo(_ s: String) -> String {
+    s == "weekly" ? "주간 한도" : s == "5h" ? "5시간 한도" : "요청 한도"
+  }
+
   private func updateUI() {
     let running = (worker?.isRunning ?? false)
     let fmt = NumberFormatter(); fmt.numberStyle = .decimal
@@ -708,19 +752,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     let diskPct = diskUsedPercent()
     let overDisk = (diskPct ?? 0) >= Double(maxDisk)
 
+    let nowMs = Date().timeIntervalSince1970 * 1000
+    let pausedNow = running && quotaPaused && pauseUntilMs > nowMs
+
     if let button = statusItem.button {
-      let glyph = running ? "wand.and.rays" : (overDisk ? "exclamationmark.triangle" : "wand.and.stars")
+      let glyph = pausedNow ? "hourglass" : (running ? "wand.and.rays" : (overDisk ? "exclamationmark.triangle" : "wand.and.stars"))
       let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular).applying(.init(scale: .medium))
       let img = NSImage(systemSymbolName: glyph, accessibilityDescription: "Omnigen")?.withSymbolConfiguration(cfg)
       img?.isTemplate = true
       button.image = img
-      button.title = (showCountInTray && activeCount >= 0) ? " \(countStr)" : ""
+      // Quota exhausted → show text (not the image count) so it's instantly obvious.
+      if pausedNow {
+        button.title = " 한도·\(clockHM(pauseUntilMs)) 리셋"
+      } else {
+        button.title = (showCountInTray && activeCount >= 0) ? " \(countStr)" : ""
+      }
       button.imagePosition = .imageLeft
     }
     var diskTag = ""
     if let d = diskPct { diskTag = " · 디스크 \(Int(d))%/\(maxDisk)%" }
     let themeTag = (running && theme != nil) ? " · ‘\(theme!)’" : ""
-    statusRow?.title = running ? "생성 중\(themeTag) · 총 \(countStr)장\(diskTag)" : "정지됨 · 총 \(countStr)장\(diskTag)"
+    if pausedNow {
+      statusRow?.title = "⏸ \(scopeKo(pauseScope)) 도달 — \(clockHM(pauseUntilMs)) 자동 재개 · 총 \(countStr)장\(diskTag)"
+    } else {
+      statusRow?.title = running ? "생성 중\(themeTag) · 총 \(countStr)장\(diskTag)" : "정지됨 · 총 \(countStr)장\(diskTag)"
+    }
+
+    // Usage row: 5h / weekly used-percent (hidden until we have data).
+    if usage5h >= 0 || usageWeek >= 0 {
+      usageRow?.isHidden = false
+      if pausedNow {
+        usageRow?.title = "⏸ \(scopeKo(pauseScope)) 도달 · \(clockHM(pauseUntilMs)) 리셋"
+      } else {
+        let a = usage5h >= 0 ? "5시간 \(Int(usage5h.rounded()))%" : "5시간 —"
+        let b = usageWeek >= 0 ? "주간 \(Int(usageWeek.rounded()))%" : "주간 —"
+        usageRow?.title = "사용량 · \(a) · \(b)"
+      }
+    } else {
+      usageRow?.isHidden = true
+    }
     toggleItem?.title = running ? "중지" : "시작 (전체 종류)"
     toggleItem?.image = sym(running ? "stop.fill" : "play.fill", running ? "중지" : "시작")
     themeItem?.isEnabled = !running
