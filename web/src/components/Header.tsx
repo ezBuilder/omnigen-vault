@@ -79,7 +79,7 @@ export function Header({
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[88vh] overflow-y-auto rounded-t-2xl">
+            <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-2xl">
               <SheetHeader className="text-left">
                 <SheetTitle>{t('filters')}</SheetTitle>
               </SheetHeader>

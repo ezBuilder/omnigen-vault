@@ -67,7 +67,7 @@ export function Lightbox({
   return (
     <Dialog open={index != null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className="flex h-[94vh] max-w-[97vw] flex-col gap-0 overflow-hidden border-border bg-background p-0 sm:max-w-[97vw] md:flex-row"
+        className="flex h-[94dvh] max-w-[97vw] flex-col gap-0 overflow-hidden border-border bg-background p-0 sm:max-w-[97vw] md:flex-row"
       >
         <DialogTitle className="sr-only">{item?.subject ?? 'image'}</DialogTitle>
         {item && (
@@ -108,7 +108,7 @@ export function Lightbox({
                 <Badge variant="outline">{t(orientationOf(item))}</Badge>
               </div>
               <p className="px-4 text-[15px] font-medium leading-snug">{item.subject}</p>
-              <ScrollArea className="mt-2 max-h-[26vh] flex-1 px-4 md:max-h-none">
+              <ScrollArea className="mt-2 max-h-[26dvh] flex-1 px-4 md:max-h-none">
                 <p className="whitespace-pre-wrap pb-4 text-[13px] leading-relaxed text-muted-foreground">
                   {item.prompt}
                 </p>
