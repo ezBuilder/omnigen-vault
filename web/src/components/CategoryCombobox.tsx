@@ -70,11 +70,25 @@ export function CategoryCombobox({
     </Command>
   );
 
-  // Mobile (inside the filter bottom-sheet): render the list inline. A nested Radix
-  // Popover inside the Sheet can open off-screen, get clipped, or fight the sheet for
-  // focus on phones — an inline list avoids that whole class of problems.
+  // Mobile (inside the filter bottom-sheet): a tap-to-expand disclosure rather than a
+  // nested Radix Popover (which can open off-screen / get clipped / fight the sheet for
+  // focus). Collapsed by default so the sheet stays compact and the footer buttons stay
+  // reachable; the inline list only appears on tap.
   if (inline) {
-    return <div className="overflow-hidden rounded-md border">{list()}</div>;
+    return (
+      <div className="overflow-hidden rounded-md border">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex h-10 w-full items-center justify-between px-3 text-sm"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+        </button>
+        {open && <div className="border-t">{list(() => setOpen(false))}</div>}
+      </div>
+    );
   }
 
   return (

@@ -79,14 +79,14 @@ export function Header({
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-2xl">
-              <SheetHeader className="text-left">
+            <SheetContent side="bottom" className="flex max-h-[88dvh] flex-col rounded-t-2xl p-0">
+              <SheetHeader className="px-6 pt-6 text-left">
                 <SheetTitle>{t('filters')}</SheetTitle>
               </SheetHeader>
-              <div className="py-4">
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
                 <FilterControls filters={filters} setFilter={setFilter} facets={facets} layout="stack" />
               </div>
-              <SheetFooter className="flex-row gap-2">
+              <SheetFooter className="flex-row gap-2 border-t border-border bg-background px-6 py-4">
                 <Button variant="outline" className="flex-1" onClick={onClearAll}>
                   {t('reset')}
                 </Button>
