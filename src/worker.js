@@ -198,18 +198,24 @@ export async function runWorker(config, { log = console.log } = {}) {
   // Aborts in-flight requests so a stop is near-instant rather than waiting out
   // long backend responses.
   const abort = new AbortController();
-  const stop = () => {
+  const stop = (graceful = false) => {
     if (state.running) {
       state.running = false;
-      abort.abort();
-      log('\nstopping — cancelling in-flight requests (cursor saved)');
+      // SIGTERM = graceful: let in-flight images finish & save, then exit (no wasted
+      // generations). SIGINT = immediate: abort in-flight for a fast stop.
+      if (!graceful) abort.abort();
+      log(graceful
+        ? '\nfinishing in-flight images, then stopping (cursor saved)'
+        : '\nstopping — cancelling in-flight requests (cursor saved)');
     } else {
       // a second signal forces an immediate exit
       process.exit(0);
     }
   };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
+  const onSigint = () => stop(false);
+  const onSigterm = () => stop(true);
+  process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigterm);
 
   // Generate + verify + store one prompt spec. Returns when done (or skipped).
   async function processSpec(spec, gi) {
@@ -418,8 +424,8 @@ export async function runWorker(config, { log = console.log } = {}) {
   try {
     await Promise.all(Array.from({ length: config.concurrency }, () => slot()));
   } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
+    process.off('SIGINT', onSigint);
+    process.off('SIGTERM', onSigterm);
     await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     checkpoint(true);
     state.running = false;

@@ -319,9 +319,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   // launch. When one changes while generating, restart so it applies immediately;
   // the worker saves its cursor on stop and resumes from there. No-op when idle.
   private func applyToRunningGeneration() {
-    guard worker?.isRunning ?? false else { return }
+    guard let proc = worker, proc.isRunning, !restartPending else { return }
     restartPending = true
-    stopGeneration()
+    proc.terminate() // SIGTERM = graceful: finish in-flight images, then exit & restart
+    notify("설정 변경 — 진행 중인 이미지를 마치고 새 설정으로 이어갑니다.")
+    updateUI()
   }
 
   private func stopGenerationSync() {
@@ -773,9 +775,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     let nowMs = Date().timeIntervalSince1970 * 1000
     let pausedNow = running && quotaPaused && pauseUntilMs > nowMs
+    // Setting changed → worker is draining in-flight images before it restarts with the
+    // new settings. Surface it (looks like a stop, but in-flight images still complete).
+    let applying = running && restartPending
 
     if let button = statusItem.button {
-      let glyph = pausedNow ? "hourglass" : (running ? "wand.and.rays" : (overDisk ? "exclamationmark.triangle" : "wand.and.stars"))
+      let glyph = applying ? "gearshape.2" : (pausedNow ? "hourglass" : (running ? "wand.and.rays" : (overDisk ? "exclamationmark.triangle" : "wand.and.stars")))
       let cfg = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular).applying(.init(scale: .medium))
       let img = NSImage(systemSymbolName: glyph, accessibilityDescription: "Omnigen")?.withSymbolConfiguration(cfg)
       img?.isTemplate = true
@@ -791,7 +796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     var diskTag = ""
     if let d = diskPct { diskTag = " · 디스크 \(Int(d))%/\(maxDisk)%" }
     let themeTag = (running && theme != nil) ? " · ‘\(theme!)’" : ""
-    if pausedNow {
+    if applying {
+      statusRow?.title = "설정 적용 중 — 진행 중 이미지 마무리 후 새 설정으로 재개 · 총 \(countStr)장\(diskTag)"
+    } else if pausedNow {
       statusRow?.title = "⏸ \(scopeKo(pauseScope)) 도달 — \(clockHM(pauseUntilMs)) 자동 재개 · 총 \(countStr)장\(diskTag)"
     } else {
       statusRow?.title = running ? "생성 중\(themeTag) · 총 \(countStr)장\(diskTag)" : "정지됨 · 총 \(countStr)장\(diskTag)"
