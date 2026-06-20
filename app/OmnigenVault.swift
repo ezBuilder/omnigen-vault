@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
   private var statusItem: NSStatusItem!
   private var worker: Process?
   private var workerLog = "" // bounded capture of generate output to surface auth/disk failures
+  private var restartPending = false // restart the worker after it exits (to apply a setting live)
   private var activeCount = -1
   private var theme: String?
   private var lastMilestone = -1
@@ -286,6 +287,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let self = self else { return }
         self.worker = nil
         outPipe.fileHandleForReading.readabilityHandler = nil
+        if self.restartPending {
+          self.restartPending = false
+          self.startGeneration() // settings changed mid-run → resume with the new args
+          return
+        }
         if self.workerLog.contains("UNAUTHORIZED") {
           self.notify("Codex 인증 만료 — 생성을 시작하지 못했습니다. 터미널에서 'codex login' 후 다시 시작하세요.")
         } else if self.diskUsedPercent() ?? 0 >= Double(self.maxDisk) {
@@ -307,6 +313,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
       if let p = self?.worker, p.isRunning { p.interrupt() } // 2nd signal forces exit
     }
     updateUI()
+  }
+
+  // Generation params (concurrency/size/OCR/max-disk) are baked into the worker at
+  // launch. When one changes while generating, restart so it applies immediately;
+  // the worker saves its cursor on stop and resumes from there. No-op when idle.
+  private func applyToRunningGeneration() {
+    guard worker?.isRunning ?? false else { return }
+    restartPending = true
+    stopGeneration()
   }
 
   private func stopGenerationSync() {
@@ -583,10 +598,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     hostField?.stringValue = publicHostname
   }
 
-  @objc private func changeConcurrency(_ s: NSPopUpButton) { concurrency = concurrencyChoices[s.indexOfSelectedItem]; saveSettings() }
-  @objc private func changeSize(_ s: NSPopUpButton) { size = sizeChoices[s.indexOfSelectedItem].value; saveSettings() }
-  @objc private func changeOCR(_ b: NSButton) { ocr = (b.state == .on); saveSettings() }
-  @objc private func changeDisk(_ s: NSPopUpButton) { maxDisk = diskChoices[s.indexOfSelectedItem]; saveSettings(); updateUI() }
+  @objc private func changeConcurrency(_ s: NSPopUpButton) { concurrency = concurrencyChoices[s.indexOfSelectedItem]; saveSettings(); applyToRunningGeneration() }
+  @objc private func changeSize(_ s: NSPopUpButton) { size = sizeChoices[s.indexOfSelectedItem].value; saveSettings(); applyToRunningGeneration() }
+  @objc private func changeOCR(_ b: NSButton) { ocr = (b.state == .on); saveSettings(); applyToRunningGeneration() }
+  @objc private func changeDisk(_ s: NSPopUpButton) { maxDisk = diskChoices[s.indexOfSelectedItem]; saveSettings(); updateUI(); applyToRunningGeneration() }
   @objc private func toggleAutoStart(_ b: NSButton) { autoStartGeneration = (b.state == .on); saveSettings() }
   @objc private func changeShowCount(_ b: NSButton) { showCountInTray = (b.state == .on); saveSettings(); updateUI() }
   @objc private func changePublicHostname(_ f: NSTextField) { publicHostname = f.stringValue.trimmingCharacters(in: .whitespacesAndNewlines); saveSettings() }
